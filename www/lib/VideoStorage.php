@@ -181,6 +181,55 @@ final class VideoStorage {
         return array_values(array_unique($origins));
     }
 
+    /**
+     * Diagnostic for Admin -> Video Storage: perform the presigned PUT exactly
+     * as the browser does (same URL, same headers, a tiny body), then HEAD and
+     * delete the object. Returns a one-line human-readable result including
+     * the raw storage error when the PUT fails. Never throws.
+     */
+    public static function describeTestUpload(): string {
+        $key = 'videos/0/0/' . bin2hex(random_bytes(16)) . '.mp4';
+        try {
+            $grant = self::presignUploadFor($key, 'video/mp4');
+        } catch (\Throwable $e) {
+            return 'Could not presign: ' . $e->getMessage();
+        }
+        $ch = curl_init($grant['url']);
+        $headers = [];
+        foreach ($grant['headers'] as $name => $value) {
+            $headers[] = $name . ': ' . $value;
+        }
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST  => 'PUT',
+            CURLOPT_POSTFIELDS     => 'mastery test upload',
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        $body = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        if ($body === false) {
+            return 'Presigned PUT failed before a response: ' . $curlError;
+        }
+        if ($status < 200 || $status >= 300) {
+            $detail = trim(strip_tags(preg_replace('/<RequestId>.*?<\/RequestId>|<HostId>.*?<\/HostId>/s', '', (string)$body) ?? ''));
+            return 'Presigned PUT returned HTTP ' . $status . ($detail !== '' ? ': ' . substr($detail, 0, 300) : '')
+                 . ' (signed headers: ' . implode(', ', array_keys($grant['headers'])) . ')';
+        }
+        try {
+            $head = self::storage()->headObject(self::bucket(), $key);
+            self::deleteObject($key);
+        } catch (\Throwable $e) {
+            return 'Presigned PUT succeeded (HTTP ' . $status . ') but verifying/deleting failed: ' . $e->getMessage();
+        }
+        return 'Test upload succeeded: PUT HTTP ' . $status . ', object seen with ' . (int)($head['size'] ?? 0)
+             . ' bytes and type "' . (string)($head['content_type'] ?? '') . '", then deleted. Browser uploads should work if the CORS rule includes the site origin.';
+    }
+
     public static function humanBytes(int $bytes): string {
         $units = ['B', 'KB', 'MB', 'GB', 'TB'];
         $i = 0;

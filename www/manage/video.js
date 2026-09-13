@@ -97,14 +97,25 @@
       };
       xhr.upload.onload = function () { setProgress(100); setStatus('Upload complete, verifying…'); };
       xhr.onload = function () {
-        if (xhr.status >= 200 && xhr.status < 300) resolve(grant.key);
-        else if (xhr.status === 403) reject(new Error('Storage refused the upload (403). The upload link may have expired or the bucket CORS rule may be missing — ask an admin to check Video Storage.'));
-        else reject(new Error('Storage returned HTTP ' + xhr.status + '.'));
+        if (xhr.status >= 200 && xhr.status < 300) { resolve(grant.key); return; }
+        // S3-style errors carry <Code> and <Message> in an XML body; surface
+        // them so a misconfiguration is diagnosable from the browser.
+        var detail = storageErrorDetail(xhr.responseText);
+        if (xhr.status === 403) reject(new Error('Storage refused the upload (403' + detail + '). The upload link may have expired or the bucket CORS rule may be missing — ask an admin to check Video Storage.'));
+        else reject(new Error('Storage returned HTTP ' + xhr.status + detail + '.'));
       };
       xhr.onerror = function () { reject(new Error('Network error while uploading. If this repeats, the bucket may be missing its CORS rule (Admin → Video Storage).')); };
       xhr.onabort = function () { reject(new Error('Upload cancelled.')); };
       xhr.send(blob);
     });
+  }
+
+  function storageErrorDetail(text) {
+    if (!text) return '';
+    var code = (text.match(/<Code>([^<]*)<\/Code>/) || [])[1];
+    var message = (text.match(/<Message>([^<]*)<\/Message>/) || [])[1];
+    var parts = [code, message].filter(Boolean);
+    return parts.length ? ' — ' + parts.join(': ') : '';
   }
 
   function attach(key) {

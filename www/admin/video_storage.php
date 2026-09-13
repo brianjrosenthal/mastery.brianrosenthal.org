@@ -95,6 +95,11 @@ header_html('Video Storage');
           <input type="hidden" name="action" value="apply_cors">
           <button type="submit" class="button <?= $corsMissing !== [] ? 'primary' : '' ?>">Apply CORS for all site origins</button>
         </form>
+        <form method="post" action="/admin/video_storage_eval.php">
+          <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
+          <input type="hidden" name="action" value="test_upload">
+          <button type="submit" class="button">Test upload</button>
+        </form>
         <?php if ($orphans !== []): ?>
           <form method="post" action="/admin/video_storage_eval.php">
             <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
@@ -104,7 +109,7 @@ header_html('Video Storage');
         <?php endif; ?>
       <?php endif; ?>
     </div>
-    <p class="small" style="margin-top:10px">Origins the CORS rule will allow: <?php foreach ($wantedOrigins as $o): ?><code><?=h($o)?></code> <?php endforeach; ?> (the main host, every site's custom domain, and localhost for development). Re-apply after adding a domain.</p>
+    <p class="small" style="margin-top:10px">Origins the CORS rule will allow: <?php foreach ($wantedOrigins as $o): ?><code><?=h($o)?></code> <?php endforeach; ?> (the main host, every site's custom domain, and localhost for development). Re-apply after adding a domain. <strong>Test upload</strong> performs a presigned PUT from this server exactly as a browser would and shows the raw response, so an upload failure can be diagnosed here.</p>
   <?php endif; ?>
 </div>
 <?php footer_html(); ?>

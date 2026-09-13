@@ -3,6 +3,9 @@
 //   create_bucket   — create the configured bucket if missing.
 //   apply_cors      — replace the bucket's CORS rule with the current site origins.
 //   delete_orphans  — delete objects no concept references.
+//   test_upload     — run the browser's presigned-PUT flow from the server
+//                     (curl) and report the raw storage response, to diagnose
+//                     upload failures.
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/VideoStorage.php';
 require_once __DIR__ . '/../lib/SiteManagement.php';
@@ -49,6 +52,11 @@ try {
             $client->deleteObjects($bucket, $orphans);
             ActivityLog::log($ctx, 'video_storage.delete_orphans', ['bucket' => $bucket, 'deleted' => count($orphans)]);
             $msg = count($orphans) . ' orphaned object(s) deleted.';
+            break;
+
+        case 'test_upload':
+            $msg = VideoStorage::describeTestUpload();
+            ActivityLog::log($ctx, 'video_storage.test_upload', ['bucket' => $bucket, 'result' => $msg]);
             break;
 
         default:
