@@ -47,6 +47,14 @@ final class SiteResolverTest extends TestCase
         $this->assertTrue($r['is_custom_domain']);
     }
 
+    public function testWwwPrefixedCustomDomainResolvesToTheSameSite(): void
+    {
+        $r = $this->resolve('www.mastery.charlierosenthal.org', '');
+        $this->assertSame(7, $r['site']['id']);
+        $this->assertTrue($r['is_custom_domain']);
+        $this->assertNull($this->resolve('www.' . MAIN_HOST, '')['site']);
+    }
+
     public function testMainHostAndUnknownHostsResolveToNoSite(): void
     {
         $this->assertNull($this->resolve(MAIN_HOST, '')['site']);

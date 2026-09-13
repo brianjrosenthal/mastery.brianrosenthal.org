@@ -73,12 +73,31 @@ final class SiteUI {
         }
     }
 
-    public static function footerHtml(array $site, ?array $owner = null): void {
+    /**
+     * @param bool    $canEdit  viewer is the owner or an admin
+     * @param ?string $editUrl  editor for the current page (shown as "Edit this page")
+     */
+    public static function footerHtml(array $site, ?array $owner = null, bool $canEdit = false, ?string $editUrl = null): void {
         $by = $owner ? trim((string)($owner['first_name'] ?? '')) : '';
+        $here = (string)($_SERVER['REQUEST_URI'] ?? '/');
         echo '</main></div>';
         echo '<footer class="site-footer"><div class="site-inner">';
         echo '<span>' . self::h($site['title']) . ($by !== '' ? ' · made by ' . self::h($by) : '') . '</span>';
-        echo '<span class="site-footer-muted">Teaching what I\'ve mastered</span>';
+        echo '<span class="site-footer-links">';
+        if (current_user()) {
+            if ($canEdit && $editUrl !== null) {
+                echo '<a href="' . self::h($editUrl) . '">Edit this page</a>';
+            }
+            if ($canEdit) {
+                echo '<a href="/manage/?user_id=' . (int)$site['user_id'] . '">Manage</a>';
+            }
+            echo '<a href="/logout.php">Log out</a>';
+        } else {
+            // Cookies are per hostname, so the owner may be signed in on the
+            // main site yet anonymous here; this is their way in.
+            echo '<a href="/login.php?next=' . self::h(urlencode($here)) . '">Log in</a>';
+        }
+        echo '</span>';
         echo '</div></footer>';
         echo ApplicationUI::jsScript('/main.js');
         echo '</body></html>';

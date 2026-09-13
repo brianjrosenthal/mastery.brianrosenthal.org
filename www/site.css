@@ -282,7 +282,9 @@ a:hover { color: var(--accent-dark); }
 .site-empty { color: var(--ink-muted); font-style: italic; }
 .site-footer { border-top: 1px solid var(--border); background: var(--surface); font-size: 0.85rem; color: var(--ink-muted); }
 .site-footer .site-inner { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px; }
-.site-footer-muted { opacity: 0.7; }
+.site-footer-links { display: flex; gap: 14px; }
+.site-footer-links a { color: var(--ink-muted); text-decoration: none; opacity: 0.8; }
+.site-footer-links a:hover { color: var(--accent-dark); text-decoration: underline; opacity: 1; }
 
 .not-found { text-align: center; padding-top: 60px; }
 .not-found-code { font-size: 4rem; font-weight: 800; color: var(--accent-soft); margin: 0; line-height: 1; }

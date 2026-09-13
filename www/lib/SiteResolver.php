@@ -47,10 +47,15 @@ final class SiteResolver {
         }
 
         $h = self::normalizeHost($host);
-        if ($h === '' || $h === self::mainHost()) {
+        if ($h === '' || $h === self::mainHost() || $h === 'www.' . self::mainHost()) {
             return $none;
         }
+        // DreamHost's "Add WWW" option can serve the site as www.<domain>;
+        // treat that as the same site.
         $site = $findByDomain($h);
+        if ($site === null && strpos($h, 'www.') === 0) {
+            $site = $findByDomain(substr($h, 4));
+        }
         if ($site === null) {
             return $none;
         }
@@ -75,7 +80,15 @@ final class SiteResolver {
     /** True when the current request's host is the site's own domain. */
     public static function requestIsOnDomainOf(array $site): bool {
         $domain = (string)($site['domain'] ?? '');
-        return $domain !== '' && self::normalizeHost((string)($_SERVER['HTTP_HOST'] ?? '')) === $domain;
+        $h = self::normalizeHost((string)($_SERVER['HTTP_HOST'] ?? ''));
+        return $domain !== '' && ($h === $domain || $h === 'www.' . $domain);
+    }
+
+    /** True when the request's hostname is the main (admin) site or unknown. */
+    public static function requestIsOnMainHost(): bool {
+        $h = self::normalizeHost((string)($_SERVER['HTTP_HOST'] ?? ''));
+        $main = self::mainHost();
+        return $main === '' || $h === $main || $h === 'www.' . $main || $h === 'localhost' || $h === '127.0.0.1';
     }
 
     /**

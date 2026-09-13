@@ -1,6 +1,8 @@
 # Deploying Mastery on the DreamHost VPS
 
-Three hostnames, one directory, one database:
+Three hostnames, one directory, one database, on a panel-managed DreamHost
+VPS (no root; everything is done from the DreamHost panel and a shell as the
+site user):
 
 | Hostname | What it shows |
 |---|---|
@@ -13,24 +15,36 @@ so all three hostnames must simply reach the same document root.
 
 ## Can DreamHost route several domains to one directory?
 
-Yes.
+Yes. Which way depends on whether you have root on the box.
 
-- **On the self-managed VPS (what we use):** Apache does it with `ServerAlias`.
-  One `<VirtualHost>` lists all three names and one `DocumentRoot`. The
-  `.htaccess` in `www/` cannot do this part (it only runs after Apache has
-  already chosen a vhost); it handles the pretty-URL rewrites and security
-  denies. See `deploy/apache-vhost.conf.example`.
-- **On DreamHost shared/panel hosting (for reference):** in the panel, add each
-  domain under *Websites → Manage Websites* as a fully hosted domain and set its
-  *Web directory* to the same folder (e.g. `/home/user/mastery.brianrosenthal.org`).
-  Alternatively add the kid domains as *Mirror* domains of the main one. Either
-  way the app then works identically, because it only looks at the hostname.
+### Panel-managed hosting (shared, or a VPS without sudo) — what we use
+
+Each domain in the panel has its own *Web directory*; several domains may
+point at the same one. Do NOT symlink `~/mastery.charlierosenthal.org` to the
+main directory: Apache and Let's Encrypt are configured from the panel's
+directory setting, so change that setting instead.
+
+1. *Websites → Manage Websites → Add Website* for `mastery.charlierosenthal.org`.
+   Choose **Fully hosted** (a *Mirror* domain cannot get HTTPS).
+2. Set **Web directory** to `/home/USER/mastery.brianrosenthal.org` (the
+   directory holding the contents of the repo's `www/`). Same PHP version as
+   the main site.
+3. Enable **Let's Encrypt** and the HTTPS-only redirect.
+4. If the domain's DNS is not at DreamHost, add the `A` record the panel shows.
+
+Nothing on disk changes: one copy of the files, one `config.local.php`, one
+`.htaccess`. The app tells the sites apart by hostname.
+
+### Self-managed VPS (root access)
+
+Apache does it with `ServerAlias`: one `<VirtualHost>` lists all the names
+and one `DocumentRoot`. See `deploy/apache-vhost.conf.example` and section 4b.
 
 ## 1. DNS
 
-For each hostname create an `A` record pointing at the VPS IP (and `AAAA` if
-the VPS has IPv6). The kid domains live in their own DreamHost DNS zones; add
-the `mastery` subdomain there.
+For each hostname create an `A` record pointing at the server IP (and `AAAA`
+if it has IPv6). With panel-managed hosting DreamHost adds this for you when
+the domain's DNS is hosted there.
 
 ## 2. Files on the server
 
@@ -70,7 +84,15 @@ Later releases: `bash ~/mastery.brianrosenthal.org/db_migrations/migrate.sh`
 
 Change the seeded admin password immediately (profile menu → Change Password).
 
-## 4. Apache
+## 4. Web server
+
+### 4a. Panel-managed hosting
+
+Nothing to do beyond the panel steps above. `.htaccess` rewrites are honoured
+by default. If uploads of the site's PHP settings are ever needed they go in a
+`phprc` file, but this app needs none: video bytes never pass through PHP.
+
+### 4b. Self-managed VPS
 
 ```bash
 sudo cp deploy/apache-vhost.conf.example /etc/apache2/sites-available/mastery.conf
@@ -82,12 +104,14 @@ sudo certbot --apache -d mastery.brianrosenthal.org -d mastery.charlierosenthal.
 ```
 
 `AllowOverride All` is required (the rewrites live in `www/.htaccess`).
-PHP needs `curl`, `mbstring`, `pdo_mysql` and `iconv`. **No upload limits need
-raising**: video bytes never pass through PHP.
+PHP needs `curl`, `mbstring`, `pdo_mysql` and `iconv`.
 
-Adding another kid's domain later: add it to `ServerAlias`, re-run certbot with
-the extra `-d`, add the DNS record, set the domain in Admin → Sites → Settings,
-then Admin → Video Storage → *Apply CORS for all site origins*.
+## Adding another kid's domain later
+
+1. Panel: add the domain as fully hosted with the shared web directory and
+   Let's Encrypt (or, self-managed: `ServerAlias` + certbot with the extra `-d`).
+2. Admin → Sites → that site's Settings → Routing → Custom domain.
+3. Admin → Video Storage → *Apply CORS for all site origins*.
 
 ## 5. Video storage (DreamObjects)
 

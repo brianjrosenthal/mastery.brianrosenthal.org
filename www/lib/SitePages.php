@@ -147,7 +147,7 @@ final class SitePages {
         echo '<h2 class="section-title">Categories</h2>';
         echo SiteUI::categoryCardsHtml($categories, $basePath, $canEdit);
 
-        SiteUI::footerHtml($site, $owner);
+        SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 
     private static function category(array $site, string $basePath, bool $canEdit, ?array $owner, array $navCategories, array $category, array $subcategories): void {
@@ -184,7 +184,7 @@ final class SitePages {
             echo '</section>';
         }
 
-        SiteUI::footerHtml($site, $owner);
+        SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 
     private static function subcategory(array $site, string $basePath, bool $canEdit, ?array $owner, array $navCategories, array $category, array $subcategory, array $concepts): void {
@@ -210,7 +210,7 @@ final class SitePages {
         echo '<h2 class="section-title">Concepts</h2>';
         echo SiteUI::conceptListHtml($concepts, $basePath, (string)$category['slug'], (string)$subcategory['slug'], $canEdit);
 
-        SiteUI::footerHtml($site, $owner);
+        SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 
     private static function concept(array $site, string $basePath, bool $canEdit, ?array $owner, array $navCategories, array $category, array $subcategory, array $concept): void {
@@ -246,6 +246,6 @@ final class SitePages {
         $neighbors = ConceptManagement::neighbors($concept, $canEdit);
         echo SiteUI::prevNextHtml($neighbors['prev'], $neighbors['next'], $basePath, (string)$category['slug'], (string)$subcategory['slug']);
 
-        SiteUI::footerHtml($site, $owner);
+        SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 }

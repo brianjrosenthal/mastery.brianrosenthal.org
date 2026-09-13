@@ -76,8 +76,8 @@ header_html('Site settings');
         <label>URL name <span class="hint">serves the site at /site/{name}/</span>
           <input type="text" name="slug" value="<?=h($form['slug'])?>" required maxlength="50" pattern="[a-z0-9]+(-[a-z0-9]+)*">
         </label>
-        <label>Custom domain <span class="hint">bare hostname; must also be in the Apache vhost and DNS</span>
-          <input type="text" name="domain" value="<?=h($form['domain'] ?? '')?>" maxlength="253" placeholder="mastery.charlierosenthal.org">
+        <label>Custom domain <span class="hint">bare hostname; the domain must also be pointed at this directory in the DreamHost panel (see docs/deployment.md)</span>
+          <input type="text" name="domain" value="<?=h($form['domain'] ?? '')?>" maxlength="253" placeholder="leave blank for none, e.g. mastery.NAME.org">
         </label>
       </div>
     <?php else: ?>
