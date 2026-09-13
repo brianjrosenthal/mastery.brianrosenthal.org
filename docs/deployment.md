@@ -101,15 +101,22 @@ then Admin → Video Storage → *Apply CORS for all site origins*.
 3. In the app: Admin → Video Storage → **Create bucket**, then **Apply CORS for
    all site origins**. The CORS rule is what lets a browser on each site PUT
    directly to the bucket; re-apply it whenever a domain is added.
-4. Upload a test video from a concept editor and play it on the public page.
+4. Click **Test upload** on the same page; it should report success.
+5. Upload a test video from a concept editor and play it on the public page.
 
 How it stays secure: the secret key never leaves the server. For each upload,
 PHP signs a URL that authorizes one PUT to one object key for 15 minutes;
 after the upload PHP checks the object's type and size before recording it.
-Objects are public-read under unguessable keys (32 random hex characters), so
-the public site plays them with plain cacheable URLs while unpublished drafts
-stay undiscoverable. Deleting a concept or replacing its video deletes the
-object.
+Objects stay **private** (DreamObjects rejects canned ACLs such as
+`public-read`); the public site plays them through presigned GET URLs whose
+timestamp is rounded down to a 6-hour window, so browsers can cache the video,
+and which stay valid for 24 hours (`VIDEO_URL_WINDOW_SECONDS` /
+`VIDEO_URL_TTL_SECONDS`). Deleting a concept or replacing its video deletes
+the object.
+
+**Test upload** on Admin → Video Storage performs the whole cycle from the
+server (presigned PUT, HEAD, presigned GET, delete) and prints the raw storage
+response, so any misconfiguration shows up there before a kid hits it.
 
 ## 6. Smoke test after deploying
 

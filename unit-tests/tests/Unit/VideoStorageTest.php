@@ -40,24 +40,37 @@ final class VideoStorageTest extends TestCase
         VideoStorage::newObjectKeyFor(3, 17, 'application/pdf');
     }
 
-    public function testPresignUploadReturnsUrlAndRequiredHeaders(): void
+    public function testPresignUploadSignsOnlyTheHostAndSendsNoAclHeader(): void
     {
+        // DreamObjects rejects canned ACLs ("Unsupported value for canned acl
+        // 'public-read'"), so the browser must send no x-amz-acl header and
+        // the signature must not require one.
         $key = VideoStorage::newObjectKeyFor(3, 17, 'video/webm');
         $grant = VideoStorage::presignUploadFor($key, 'video/webm;codecs=vp9');
         $this->assertStringStartsWith('https://objects-test.dream.io/' . VideoStorage::bucket() . '/videos/3/17/', $grant['url']);
-        $this->assertStringContainsString('X-Amz-SignedHeaders=host%3Bx-amz-acl', $grant['url']);
+        $this->assertStringContainsString('X-Amz-SignedHeaders=host&', $grant['url']);
         $this->assertStringContainsString('X-Amz-Expires=' . VideoStorage::UPLOAD_URL_TTL, $grant['url']);
-        $this->assertSame('public-read', $grant['headers']['x-amz-acl']);
-        $this->assertSame('video/webm', $grant['headers']['Content-Type']);
+        $this->assertSame(['Content-Type' => 'video/webm'], $grant['headers']);
         $this->assertSame([], $this->storage()->calls, 'presigning never touches storage');
     }
 
-    public function testPublicUrl(): void
+    public function testPlaybackUrlIsPresignedAndStableWithinAWindow(): void
     {
-        $this->assertSame(
-            'https://objects-test.dream.io/' . VideoStorage::bucket() . '/videos/3/17/abc.mp4',
-            VideoStorage::publicUrlFor('videos/3/17/abc.mp4')
-        );
+        $key = 'videos/3/17/abc.mp4';
+        $window = VideoStorage::urlWindowSeconds();
+        $t0 = 1774526400 - (1774526400 % $window);
+        $a = VideoStorage::playbackUrlFor($key, $t0 + 10);
+        $b = VideoStorage::playbackUrlFor($key, $t0 + $window - 1);
+        $c = VideoStorage::playbackUrlFor($key, $t0 + $window);
+
+        $this->assertStringStartsWith('https://objects-test.dream.io/' . VideoStorage::bucket() . '/' . $key . '?', $a);
+        $this->assertStringContainsString('X-Amz-Signature=', $a);
+        $this->assertSame($a, $b, 'same window => byte-identical URL so the browser can cache the video');
+        $this->assertNotSame($a, $c, 'a new window re-signs');
+        $this->assertStringContainsString('X-Amz-Expires=' . VideoStorage::urlTtlSeconds(), $a);
+        $this->assertGreaterThanOrEqual(2 * $window, VideoStorage::urlTtlSeconds(), 'a URL minted at the start of a window must outlive its end');
+        $this->assertLessThanOrEqual(604800, VideoStorage::urlTtlSeconds());
+        $this->assertSame([], $this->storage()->calls, 'playback URLs are pure computation');
     }
 
     public function testVerifyUploadedObjectAcceptsGoodObjects(): void

@@ -69,14 +69,18 @@ back to the public page so saving returns there.
    `video_presign_eval.php`; the server checks ownership, type and size and
    returns a presigned PUT URL for a fresh key `videos/{user}/{concept}/{random}.{ext}`.
 2. Browser PUTs the Blob straight to DreamObjects (XHR, so upload progress is
-   observable) with `x-amz-acl: public-read`.
+   observable). No ACL header: DreamObjects rejects canned ACLs, so objects
+   stay private.
 3. Browser POSTs the key to `concept_video_attach_eval.php`, which HEADs the
    object to verify it, records it on the concept, deletes the previous
    object, and returns the refreshed video panel as an HTML fragment.
 
 The secret key never leaves the server; a presigned URL authorizes exactly one
 key for 15 minutes. The bucket's CORS rule (applied from Admin → Video Storage)
-is limited to the site origins.
+is limited to the site origins. Playback uses presigned GET URLs
+(`VideoStorage::playbackUrlFor`) whose timestamp is quantized to a 6-hour
+window (cacheable, byte-identical for every viewer in the window) with a
+24-hour lifetime.
 
 ## What an admin can do (Admin dropdown)
 
@@ -87,7 +91,8 @@ is limited to the site origins.
   slug/domain are set) and its content.
 - **Settings**: site title, time zone, site URL (used in email links).
 - **Video Storage**: credentials check, create bucket, apply CORS for all site
-  origins, bucket vs database reconciliation, delete orphans.
+  origins, test upload (full PUT/HEAD/GET/delete cycle with the raw storage
+  response), bucket vs database reconciliation, delete orphans.
 - **Migrations**: `db_migrations/*.sql` with applied status from
   `schema_migrations`; apply pending ones. `db_migrations/migrate.sh` does the
   same from a shell.

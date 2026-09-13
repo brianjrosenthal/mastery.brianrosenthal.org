@@ -108,7 +108,7 @@ class DreamObjects {
         return defined('DREAMOBJECTS_VIDEO_BUCKET') ? DREAMOBJECTS_VIDEO_BUCKET : '';
     }
 
-    /** Plain (unsigned) URL of an object — playable only if it was uploaded public-read. */
+    /** Plain (unsigned) URL of an object — only useful for objects that are readable without auth. */
     public function publicUrl(string $bucket, string $key): string {
         return $this->endpoint . $this->canonicalPath($bucket, $key);
     }
@@ -280,10 +280,9 @@ class DreamObjects {
     /**
      * Build a presigned GET URL. Pure local computation (no network I/O).
      *
-     * Not used for playback (videos are public-read) but kept for the case
-     * where a private bucket is ever wanted. Callers should pass a QUANTIZED
-     * $issuedAt so identical URLs are minted within a window and browsers can
-     * cache the response.
+     * Used for video playback. Callers pass a QUANTIZED $issuedAt (see
+     * VideoStorage::urlIssuedAt) so every viewer in a window gets a
+     * byte-identical URL and the browser can cache the response.
      */
     public function presignedGetUrl(string $bucket, string $key, int $issuedAt, int $ttlSeconds): string {
         if ($ttlSeconds < 1) {
@@ -405,9 +404,9 @@ class DreamObjects {
     }
 
     /**
-     * Create a bucket unless it already exists. The bucket itself stays private;
-     * each video object is uploaded with a public-read ACL under an unguessable
-     * key, which is what the public site plays back.
+     * Create a bucket unless it already exists. The bucket and its objects stay
+     * private: the public site plays videos through presigned GET URLs
+     * (DreamObjects rejects canned ACLs such as public-read).
      *
      * @return bool True if a bucket was created, false if it already existed.
      * @throws \RuntimeException on failure (including a name taken by another

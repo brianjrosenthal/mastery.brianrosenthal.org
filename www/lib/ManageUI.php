@@ -214,7 +214,7 @@ final class ManageUI {
         $html .= '<h3 id="video">Video</h3>';
 
         if ($key !== '') {
-            $src = VideoStorage::publicUrlFor($key);
+            $src = VideoStorage::playbackUrlFor($key);
             $html .= '<div class="video-current">'
                    . '<video controls playsinline preload="metadata" src="' . h($src) . '"></video>'
                    . '<p class="small">' . h(VideoStorage::humanBytes((int)$concept['video_size_bytes'])) . ' · '

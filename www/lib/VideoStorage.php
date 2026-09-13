@@ -15,9 +15,11 @@ require_once __DIR__ . '/DreamObjects.php';
  * the bucket, and concept_video_attach_eval.php then calls
  * verifyUploadedObject() before the key is recorded on the concept.
  *
- * Objects are uploaded public-read under unguessable keys
- * (videos/{user_id}/{concept_id}/{32 hex}.{ext}), so the public site can use
- * plain cacheable <video src> URLs while drafts stay undiscoverable.
+ * Objects stay PRIVATE (DreamObjects rejects canned ACLs such as public-read)
+ * and are played back through presigned GET URLs. The signature timestamp is
+ * quantized to a window so every visitor in that window gets a byte-identical
+ * URL and the browser can cache the video; the TTL is always at least twice
+ * the window so a URL minted at the start of a window outlives its end.
  */
 final class VideoStorage {
 
@@ -27,6 +29,12 @@ final class VideoStorage {
 
     /** Default cap when VIDEO_MAX_BYTES is not configured: 2 GB. */
     private const DEFAULT_MAX_BYTES = 2147483648;
+
+    /** Playback URL quantization window (6 h) and lifetime (24 h) defaults;
+     *  override with VIDEO_URL_WINDOW_SECONDS / VIDEO_URL_TTL_SECONDS. */
+    private const DEFAULT_URL_WINDOW = 21600;
+    private const DEFAULT_URL_TTL = 86400;
+    private const MAX_PRESIGN_TTL = 604800;
 
     /** MIME type => object key extension. Browsers record webm (Chrome/Firefox)
      *  or mp4 (Safari); phones upload mp4/mov. */
@@ -104,7 +112,8 @@ final class VideoStorage {
 
     /**
      * Everything the browser needs to PUT one object: the presigned URL and the
-     * headers it must send (the ACL header is part of the signature).
+     * headers it must send. Only the host is signed: no ACL header, because
+     * DreamObjects rejects canned ACLs ("Unsupported value for canned acl").
      * @return array{url:string,headers:array<string,string>,expires_in:int}
      */
     public static function presignUploadFor(string $key, string $contentType): array {
@@ -112,18 +121,37 @@ final class VideoStorage {
         if (self::extensionFor($type) === null) {
             throw new InvalidArgumentException('Unsupported video type "' . $contentType . '".');
         }
-        $headers = ['x-amz-acl' => 'public-read'];
-        $url = self::storage()->presignedPutUrl(self::bucket(), $key, time(), self::UPLOAD_URL_TTL, $headers);
+        $url = self::storage()->presignedPutUrl(self::bucket(), $key, time(), self::UPLOAD_URL_TTL);
         return [
             'url'        => $url,
-            'headers'    => $headers + ['Content-Type' => $type],
+            'headers'    => ['Content-Type' => $type],
             'expires_in' => self::UPLOAD_URL_TTL,
         ];
     }
 
-    /** Plain URL the public site plays the video from. */
-    public static function publicUrlFor(string $key): string {
-        return self::storage()->publicUrl(self::bucket(), $key);
+    public static function urlWindowSeconds(): int {
+        $w = defined('VIDEO_URL_WINDOW_SECONDS') ? (int)VIDEO_URL_WINDOW_SECONDS : self::DEFAULT_URL_WINDOW;
+        return min(max(60, $w), intdiv(self::MAX_PRESIGN_TTL, 2));
+    }
+
+    public static function urlTtlSeconds(): int {
+        $ttl = defined('VIDEO_URL_TTL_SECONDS') ? (int)VIDEO_URL_TTL_SECONDS : self::DEFAULT_URL_TTL;
+        return min(max($ttl, self::urlWindowSeconds() * 2), self::MAX_PRESIGN_TTL);
+    }
+
+    /** The signature timestamp for playback URLs, rounded down to the window. */
+    public static function urlIssuedAt(?int $now = null): int {
+        $window = self::urlWindowSeconds();
+        return intdiv($now ?? time(), $window) * $window;
+    }
+
+    /**
+     * The URL a <video> tag plays the object from: a presigned GET, identical
+     * for every viewer within the current window (cacheable), valid for the
+     * TTL. Pure local computation — no storage round trip per page view.
+     */
+    public static function playbackUrlFor(string $key, ?int $now = null): string {
+        return self::storage()->presignedGetUrl(self::bucket(), $key, self::urlIssuedAt($now), self::urlTtlSeconds());
     }
 
     /**
@@ -222,12 +250,28 @@ final class VideoStorage {
         }
         try {
             $head = self::storage()->headObject(self::bucket(), $key);
+        } catch (\Throwable $e) {
+            return 'Presigned PUT succeeded (HTTP ' . $status . ') but verifying failed: ' . $e->getMessage();
+        }
+
+        // Playback: an unauthenticated GET of the presigned playback URL.
+        $ch = curl_init(self::playbackUrlFor($key));
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_TIMEOUT => 30]);
+        $played = curl_exec($ch);
+        $playStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        try {
             self::deleteObject($key);
         } catch (\Throwable $e) {
-            return 'Presigned PUT succeeded (HTTP ' . $status . ') but verifying/deleting failed: ' . $e->getMessage();
+            return 'Upload and playback worked but deleting the test object failed: ' . $e->getMessage();
+        }
+        if ($played !== 'mastery test upload' || $playStatus !== 200) {
+            return 'Upload worked (HTTP ' . $status . ') but playback via a presigned GET returned HTTP ' . $playStatus
+                 . ($played === false || $played === '' ? '' : ': ' . substr(trim(strip_tags((string)$played)), 0, 200)) . '.';
         }
         return 'Test upload succeeded: PUT HTTP ' . $status . ', object seen with ' . (int)($head['size'] ?? 0)
-             . ' bytes and type "' . (string)($head['content_type'] ?? '') . '", then deleted. Browser uploads should work if the CORS rule includes the site origin.';
+             . ' bytes and type "' . (string)($head['content_type'] ?? '') . '", playback GET HTTP 200, then deleted.'
+             . ' Browser uploads should work if the CORS rule includes the site origin.';
     }
 
     public static function humanBytes(int $bytes): string {

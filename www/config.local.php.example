@@ -35,8 +35,9 @@ define('REMEMBER_TOKEN_KEY', '');
 // ---- Video storage: DreamHost DreamObjects (S3-compatible) ----
 // Videos never touch this server: the browser uploads straight to the bucket
 // using a short-lived URL signed by PHP with the secret key below, and the
-// public site plays them from the bucket. Create the bucket and apply CORS
-// from Admin -> Video Storage once these are filled in.
+// public site plays them back through signed URLs (objects stay private).
+// Create the bucket and apply CORS from Admin -> Video Storage once these are
+// filled in, then click "Test upload" there.
 // Keys: DreamHost panel -> Cloud Services -> DreamObjects -> Users -> Keys.
 define('DREAMOBJECTS_ENDPOINT', 'https://objects-us-east-1.dream.io');
 define('DREAMOBJECTS_REGION', 'us-east-1');
@@ -46,3 +47,9 @@ define('DREAMOBJECTS_VIDEO_BUCKET', 'mastery-videos'); // bucket names are globa
 
 // Largest video a user may upload, in bytes (default 2 GB).
 define('VIDEO_MAX_BYTES', 2 * 1024 * 1024 * 1024);
+
+// Playback URLs are signed with a timestamp rounded down to WINDOW seconds
+// (so browsers can cache the video) and stay valid for TTL seconds (forced to
+// at least 2 x WINDOW, at most 7 days). Defaults: 6 hours / 24 hours.
+// define('VIDEO_URL_WINDOW_SECONDS', 21600);
+// define('VIDEO_URL_TTL_SECONDS', 86400);
