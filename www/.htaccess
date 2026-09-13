@@ -1,0 +1,35 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Never serve these.
+  RewriteRule ^logs(/|$) - [F,L]
+  RewriteRule ^db_migrations(/|$) - [F,L]
+  RewriteRule ^lib(/|$) - [F,L]
+
+  # Real files and directories (login.php, /manage/, styles.css ...) win.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Pretty URLs for the public sites. PHP decides whose site it is:
+  #   /site/{slug}/{category}/{subcategory}/{concept}/   (any hostname)
+  #   /{category}/{subcategory}/{concept}/               (a site's custom domain)
+  # Routing the extra domains to this directory is done in the Apache vhost
+  # (ServerAlias), not here — see docs/deployment.md.
+  RewriteRule ^site/([a-z0-9-]+)/?(.*)$ public_site.php?site=$1&path=$2 [L,QSA]
+  RewriteRule ^(.*)$ public_site.php?path=$1 [L,QSA]
+</IfModule>
+
+<FilesMatch "\.log$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "^config\.local\.php(\.example)?$">
+  Require all denied
+</FilesMatch>
+
+<FilesMatch "^schema\.sql$">
+  Require all denied
+</FilesMatch>

@@ -1,0 +1,29 @@
+# Apache vhost for the Mastery app on the DreamHost VPS (self-managed Apache).
+# One DocumentRoot serves all three hostnames: PHP looks at the Host header
+# (SiteResolver) to decide whether to show the admin site or a user's site.
+#
+# 1. Copy to /etc/apache2/sites-available/mastery.conf, adjust paths/user.
+# 2. sudo a2enmod rewrite; sudo a2ensite mastery; sudo systemctl reload apache2
+# 3. Point DNS A records for all three hostnames at this server.
+# 4. sudo certbot --apache -d mastery.brianrosenthal.org \
+#        -d mastery.charlierosenthal.org -d mastery.lillyrosenthal.org
+#    (certbot writes the :443 vhost and the http->https redirect for you.)
+# 5. When a new kid domain is added: add it to ServerAlias, re-run certbot
+#    with the extra -d, set the domain in Admin -> Sites, and re-apply CORS in
+#    Admin -> Video Storage.
+
+<VirtualHost *:80>
+    ServerName mastery.brianrosenthal.org
+    ServerAlias mastery.charlierosenthal.org mastery.lillyrosenthal.org
+
+    DocumentRoot /home/lillytech/mastery.brianrosenthal.org
+
+    <Directory /home/lillytech/mastery.brianrosenthal.org>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+
+    ErrorLog ${APACHE_LOG_DIR}/mastery-error.log
+    CustomLog ${APACHE_LOG_DIR}/mastery-access.log combined
+</VirtualHost>

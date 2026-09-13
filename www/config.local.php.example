@@ -1,0 +1,48 @@
+<?php
+// Local configuration for the Mastery app (do not commit the real config.local.php)
+//
+// Copy this file to config.local.php and fill in your environment-specific values.
+
+define('DB_HOST', '');
+define('DB_NAME', 'mastery_brianrosenthal');
+define('DB_USER', '');
+define('DB_PASS', '');
+
+// Application branding (used as a fallback; UI will prefer Settings::get('site_title', APP_NAME))
+define('APP_NAME', 'Mastery');
+
+// Hostname of the main (admin) site. Requests on any other hostname are
+// treated as a user's public site (matched against sites.domain).
+define('MAIN_HOST', 'mastery.brianrosenthal.org');
+
+// A password that signs in as any user — for testing only. Leave empty ('')
+// to disable, and disable it in production once testing is done.
+define('SUPER_PASSWORD', '');
+
+// SMTP configuration (e.g., Gmail with App Password)
+define('SMTP_HOST', 'smtp.gmail.com'); // smtp.gmail.com
+define('SMTP_PORT', 587);              // 587 for STARTTLS, 465 for SSL
+define('SMTP_USER', '');               // your Gmail address
+define('SMTP_PASS', '');               // app password (recommended)
+define('SMTP_SECURE', 'tls');          // 'tls' or 'ssl'
+define('SMTP_FROM_EMAIL', '');         // often the same as SMTP_USER
+define('SMTP_FROM_NAME', 'Mastery');   // From name seen in emails
+
+// HMAC key for remember me tokens (REQUIRED for persistent login).
+// Set to a long random string, e.g., bin2hex(random_bytes(32)).
+define('REMEMBER_TOKEN_KEY', '');
+
+// ---- Video storage: DreamHost DreamObjects (S3-compatible) ----
+// Videos never touch this server: the browser uploads straight to the bucket
+// using a short-lived URL signed by PHP with the secret key below, and the
+// public site plays them from the bucket. Create the bucket and apply CORS
+// from Admin -> Video Storage once these are filled in.
+// Keys: DreamHost panel -> Cloud Services -> DreamObjects -> Users -> Keys.
+define('DREAMOBJECTS_ENDPOINT', 'https://objects-us-east-1.dream.io');
+define('DREAMOBJECTS_REGION', 'us-east-1');
+define('DREAMOBJECTS_ACCESS_KEY', '');   // empty = video uploads disabled
+define('DREAMOBJECTS_SECRET_KEY', '');
+define('DREAMOBJECTS_VIDEO_BUCKET', 'mastery-videos'); // bucket names are globally unique
+
+// Largest video a user may upload, in bytes (default 2 GB).
+define('VIDEO_MAX_BYTES', 2 * 1024 * 1024 * 1024);
