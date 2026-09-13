@@ -350,7 +350,10 @@ table.list td.num, table.list th.num { text-align: right; }
 
 /* ===== Manage: markdown editor ===== */
 
-.md-field .md-toolbar { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.md-field { display: flex; flex-direction: column; gap: 5px; }
+.md-field > label { font-weight: 600; font-size: 0.92rem; }
+.md-field textarea { width: 100%; }
+.md-field .md-toolbar { display: flex; gap: 10px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 .md-preview {
   border: 2px dashed var(--color-border);
   border-radius: var(--radius);
