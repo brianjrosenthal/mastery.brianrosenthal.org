@@ -1,9 +1,11 @@
-/* Mastery — public site theme. --accent, --accent-dark and --accent-soft are
-   set per site inline from the owner's chosen palette colour. */
+/* Mastery — public site theme. --accent, --accent-dark, --accent-light and
+   --accent-soft are set per site inline from the owner's chosen colour
+   scheme (SiteManagement::ACCENTS); everything coloured derives from them. */
 
 :root {
   --accent: #2563EB;
   --accent-dark: #1D4ED8;
+  --accent-light: #4F8DF9;
   --accent-soft: #DBEAFE;
   --bg: #FFFCF7;
   --surface: #FFFFFF;
@@ -63,38 +65,41 @@ a:hover { color: var(--accent-dark); }
 
 /* ===== Header ===== */
 
-.site-header { background: var(--surface); border-bottom: 1px solid var(--border); }
+.site-header {
+  background: linear-gradient(100deg, var(--accent-dark) 0%, var(--accent) 55%, var(--accent-light) 100%);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(45, 42, 62, .18);
+}
 .site-header .site-inner { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding-block: 14px; }
 .site-brand {
   font-weight: 800;
   font-size: 1.25rem;
-  color: var(--ink);
+  color: #fff;
   text-decoration: none;
   letter-spacing: -0.2px;
-  padding-left: 14px;
-  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .site-brand::before {
   content: "";
-  position: absolute;
-  left: 0;
-  top: 0.2em;
-  bottom: 0.2em;
-  width: 5px;
-  border-radius: 3px;
-  background: var(--accent);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
 }
-.site-brand:hover { color: var(--accent-dark); }
+.site-brand:hover { color: #fff; opacity: 0.92; }
 .site-nav { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; }
 .site-nav a {
-  color: var(--ink-muted);
+  color: rgba(255, 255, 255, 0.92);
   text-decoration: none;
   font-weight: 600;
   font-size: 0.92rem;
   padding: 5px 11px;
   border-radius: 999px;
 }
-.site-nav a:hover { background: var(--accent-soft); color: var(--accent-dark); }
+.site-nav a:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
 
 /* ===== Breadcrumbs, titles ===== */
 
@@ -113,7 +118,7 @@ a:hover { color: var(--accent-dark); }
   color: var(--accent-dark);
 }
 .page-title { font-size: clamp(1.7rem, 4vw, 2.4rem); line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.3px; }
-.section-title { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--ink-muted); margin: 30px 0 12px; }
+.section-title { font-size: 1.1rem; text-transform: uppercase; letter-spacing: 0.8px; color: var(--accent-dark); margin: 30px 0 12px; }
 
 /* ===== Hero (home) ===== */
 
@@ -123,9 +128,10 @@ a:hover { color: var(--accent-dark); }
   border-radius: var(--radius-card);
   background:
     radial-gradient(circle at 90% 10%, var(--accent-soft), transparent 45%),
-    radial-gradient(circle at 5% 100%, rgba(255, 209, 102, .35), transparent 40%),
+    radial-gradient(circle at 5% 100%, var(--accent-soft), transparent 40%),
     var(--surface);
   border: 1px solid var(--border);
+  border-left: 6px solid var(--accent);
   box-shadow: var(--shadow-soft);
 }
 .hero-title { font-size: clamp(2rem, 5vw, 3rem); margin: 0; line-height: 1.1; letter-spacing: -0.5px; }
@@ -205,8 +211,8 @@ a:hover { color: var(--accent-dark); }
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent-dark);
+  background: var(--accent);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -280,7 +286,7 @@ a:hover { color: var(--accent-dark); }
 /* ===== Misc ===== */
 
 .site-empty { color: var(--ink-muted); font-style: italic; }
-.site-footer { border-top: 1px solid var(--border); background: var(--surface); font-size: 0.85rem; color: var(--ink-muted); }
+.site-footer { border-top: 3px solid var(--accent); background: var(--surface); font-size: 0.85rem; color: var(--ink-muted); }
 .site-footer .site-inner { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-block: 14px; }
 .site-footer-links { display: flex; gap: 14px; }
 .site-footer-links a { color: var(--ink-muted); text-decoration: none; opacity: 0.8; }

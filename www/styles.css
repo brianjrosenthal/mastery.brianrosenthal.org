@@ -348,6 +348,30 @@ table.list td.num, table.list th.num { text-align: right; }
 .badge.video { background: var(--color-primary-soft); color: var(--color-primary-dark); }
 .badge.novideo { background: #F1EEF7; color: var(--color-ink-muted); }
 
+/* ===== Manage: colour scheme picker ===== */
+
+.scheme-picker { display: flex; gap: 10px; flex-wrap: wrap; }
+.scheme-option { position: relative; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 600; font-size: 0.85rem; }
+.scheme-option input { position: absolute; opacity: 0; width: 0; height: 0; }
+.scheme-swatch {
+  display: flex;
+  flex-direction: column;
+  width: 84px;
+  height: 58px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 3px solid transparent;
+  background: #fff;
+  box-shadow: var(--shadow-soft);
+}
+.scheme-swatch-bar { height: 16px; background: linear-gradient(100deg, var(--swatch-dark), var(--swatch) 55%, var(--swatch-light)); }
+.scheme-swatch-body { flex: 1; display: flex; gap: 5px; padding: 6px; background: #FFFCF7; }
+.scheme-swatch-body span { flex: 1; border-radius: 4px; background: #fff; border-top: 3px solid var(--swatch); }
+.scheme-swatch-body span:last-child { background: var(--swatch-soft); border-top-color: var(--swatch-soft); }
+.scheme-option input:checked + .scheme-swatch { border-color: var(--color-ink); }
+.scheme-option input:focus-visible + .scheme-swatch { box-shadow: 0 0 0 3px var(--color-primary-soft); }
+.scheme-option:hover .scheme-swatch { border-color: var(--swatch); }
+
 /* ===== Manage: markdown editor ===== */
 
 .md-field { display: flex; flex-direction: column; gap: 5px; }

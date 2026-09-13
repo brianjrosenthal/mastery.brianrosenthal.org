@@ -20,10 +20,11 @@ final class SiteUI {
         return htmlspecialchars((string)($s ?? ''), ENT_QUOTES, 'UTF-8');
     }
 
-    /** Inline CSS variables for the site's accent colour. */
+    /** Inline CSS variables for the site's colour scheme. */
     public static function accentStyle(array $site): string {
         $accent = SiteManagement::ACCENTS[$site['accent_color']] ?? SiteManagement::ACCENTS['blue'];
-        return ':root{--accent:' . $accent['color'] . ';--accent-dark:' . $accent['dark'] . ';--accent-soft:' . $accent['soft'] . ';}';
+        return ':root{--accent:' . $accent['color'] . ';--accent-dark:' . $accent['dark']
+             . ';--accent-light:' . $accent['light'] . ';--accent-soft:' . $accent['soft'] . ';}';
     }
 
     /**

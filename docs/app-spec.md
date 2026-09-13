@@ -34,8 +34,10 @@ accent colour, public flag, a path slug and an optional custom domain.
   previous/next within the subcategory.
 - Only published concepts are shown, and categories/subcategories with no
   published concept are hidden. Markdown is rendered with Parsedown in safe
-  mode (raw HTML escaped). Each site picks an accent colour from a fixed
-  palette (`SiteManagement::ACCENTS`), applied as CSS variables in `site.css`.
+  mode (raw HTML escaped). Each site picks a colour scheme from a fixed
+  palette (`SiteManagement::ACCENTS`; Blue is the default, Purple is the
+  `violet` key), applied as CSS variables in `site.css` that colour the
+  header gradient, hero, links, cards and footer.
 
 ## Editing in context (owner or admin, signed in)
 
@@ -50,8 +52,8 @@ back to the public page so saving returns there.
 - **Dashboard**: the whole tree with publish/video status and per-node
   actions; "View site" and "Site settings". Admins get a user switcher
   (`?user_id=`) to manage anyone's site. A user without a site can create one.
-- **Site settings**: title, tagline, homepage Markdown (with Preview), accent
-  colour, public toggle. Slug and custom domain are admin-only fields.
+- **Site settings**: title, tagline, homepage Markdown (with Preview), colour
+  scheme (swatch picker), public toggle. Slug and custom domain are admin-only fields.
 - **Category / subcategory add & edit**: name, optional slug (generated from
   the name, de-duplicated, reserved names refused), Markdown description,
   order. Delete is offered only when empty.

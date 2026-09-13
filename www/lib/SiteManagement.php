@@ -14,17 +14,19 @@ require_once __DIR__ . '/Slugger.php';
 final class SiteManagement {
 
     /**
-     * Accent palette a site owner can pick from. Keys are stored in
-     * sites.accent_color; SiteUI turns them into CSS variables.
-     * @var array<string,array{label:string,color:string,dark:string,soft:string}>
+     * Colour schemes a site owner can pick from. Keys are stored in
+     * sites.accent_color ('violet' is shown as Purple); SiteUI turns them into
+     * CSS variables that drive the whole public site.
+     * @var array<string,array{label:string,color:string,dark:string,light:string,soft:string}>
      */
     public const ACCENTS = [
-        'blue'   => ['label' => 'Blue',   'color' => '#2563EB', 'dark' => '#1D4ED8', 'soft' => '#DBEAFE'],
-        'violet' => ['label' => 'Violet', 'color' => '#7C3AED', 'dark' => '#6528C9', 'soft' => '#EDE4FF'],
-        'coral'  => ['label' => 'Coral',  'color' => '#E85454', 'dark' => '#C43E3E', 'soft' => '#FFE4E4'],
-        'mint'   => ['label' => 'Mint',   'color' => '#05B888', 'dark' => '#04795A', 'soft' => '#D9F8EE'],
-        'sunny'  => ['label' => 'Sunny',  'color' => '#D99A00', 'dark' => '#A9760A', 'soft' => '#FFF1CC'],
-        'sky'    => ['label' => 'Sky',    'color' => '#0EA5E9', 'dark' => '#0369A1', 'soft' => '#DDF3FD'],
+        'blue'   => ['label' => 'Blue',   'color' => '#2563EB', 'dark' => '#1D4ED8', 'light' => '#4F8DF9', 'soft' => '#DBEAFE'],
+        'violet' => ['label' => 'Purple', 'color' => '#7C3AED', 'dark' => '#6528C9', 'light' => '#9D5CFF', 'soft' => '#EDE4FF'],
+        'coral'  => ['label' => 'Coral',  'color' => '#E85454', 'dark' => '#C43E3E', 'light' => '#FF7A7A', 'soft' => '#FFE4E4'],
+        'mint'   => ['label' => 'Mint',   'color' => '#05B888', 'dark' => '#04795A', 'light' => '#2ED3A6', 'soft' => '#D9F8EE'],
+        'sunny'  => ['label' => 'Sunny',  'color' => '#D99A00', 'dark' => '#A9760A', 'light' => '#F2B824', 'soft' => '#FFF1CC'],
+        'sky'    => ['label' => 'Sky',    'color' => '#0EA5E9', 'dark' => '#0369A1', 'light' => '#38BDF8', 'soft' => '#DDF3FD'],
+        'slate'  => ['label' => 'Slate',  'color' => '#475569', 'dark' => '#334155', 'light' => '#64748B', 'soft' => '#E2E8F0'],
     ];
 
     private static function pdo(): PDO {

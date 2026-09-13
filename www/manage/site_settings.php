@@ -53,17 +53,18 @@ header_html('Site settings');
 
     <?= ManageUI::markdownFieldHtml('homepage_markdown', 'Homepage', (string)$form['homepage_markdown'], 'shown above your categories') ?>
 
-    <label>Accent colour
-      <div class="actions">
+    <div class="stack" style="gap:6px">
+      <label style="margin:0">Colour scheme <span class="hint">colours the header, links and cards on your site</span></label>
+      <div class="scheme-picker">
         <?php foreach (SiteManagement::ACCENTS as $key => $accent): ?>
-          <label class="inline" style="gap:6px">
+          <label class="scheme-option" style="--swatch:<?=h($accent['color'])?>;--swatch-dark:<?=h($accent['dark'])?>;--swatch-light:<?=h($accent['light'])?>;--swatch-soft:<?=h($accent['soft'])?>">
             <input type="radio" name="accent_color" value="<?=h($key)?>" <?= $form['accent_color'] === $key ? 'checked' : '' ?>>
-            <span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:<?=h($accent['color'])?>"></span>
-            <?=h($accent['label'])?>
+            <span class="scheme-swatch" aria-hidden="true"><span class="scheme-swatch-bar"></span><span class="scheme-swatch-body"><span></span><span></span></span></span>
+            <span class="scheme-label"><?=h($accent['label'])?></span>
           </label>
         <?php endforeach; ?>
       </div>
-    </label>
+    </div>
 
     <label class="inline">
       <input type="checkbox" name="is_public" value="1" <?= !empty($form['is_public']) ? 'checked' : '' ?>>
