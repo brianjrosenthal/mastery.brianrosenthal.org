@@ -29,6 +29,7 @@ foreach (SubcategoryManagement::listForCategory((int)$sub['category_id']) as $ro
     if ((int)$row['id'] === $id) { $conceptCount = (int)$row['concept_count']; }
 }
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('Edit ' . $sub['name']);
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <a href="/manage/category_edit.php?id=<?= (int)$cat['id'] ?>"><?=h($cat['name'])?></a> › <?=h($sub['name'])?></div>

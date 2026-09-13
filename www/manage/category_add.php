@@ -11,6 +11,7 @@ $stash = ManageUI::takeForm('category_add_' . $userId);
 $form = $stash['data'] + ['name' => '', 'slug' => '', 'description_markdown' => ''];
 $err = $stash['err'];
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('New category');
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › New category</div>

@@ -25,6 +25,7 @@ $stash = ManageUI::takeForm('concept_add_' . $subcategoryId);
 $form = $stash['data'] + ['title' => '', 'slug' => '', 'description_markdown' => '', 'is_published' => 0, 'resources' => []];
 $err = $stash['err'];
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('New concept');
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <a href="/manage/category_edit.php?id=<?= (int)$cat['id'] ?>"><?=h($cat['name'])?></a> › <a href="/manage/subcategory_edit.php?id=<?= $subcategoryId ?>"><?=h($sub['name'])?></a> › New concept</div>

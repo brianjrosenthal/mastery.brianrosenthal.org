@@ -13,6 +13,32 @@ require_once __DIR__ . '/SiteResolver.php';
  */
 class ApplicationUI {
 
+    /** The site whose colour scheme this page should wear (see useSiteTheme). */
+    private static ?array $themeSite = null;
+
+    /**
+     * Make the authoring chrome wear a site's colour scheme. Pages that manage
+     * a specific site call this; otherwise headerHtml() falls back to the site
+     * of the current hostname, then the signed-in user's own site.
+     */
+    public static function useSiteTheme(?array $site): void {
+        self::$themeSite = $site;
+    }
+
+    /** Inline CSS variables overriding the app's blue with a site's scheme, or ''. */
+    public static function siteThemeStyle(?array $site): string {
+        if ($site === null) {
+            return '';
+        }
+        $accent = SiteManagement::ACCENTS[$site['accent_color']] ?? null;
+        if ($accent === null || $site['accent_color'] === 'blue') {
+            return '';
+        }
+        return '<style>:root{--color-primary:' . $accent['color'] . ';--color-primary-dark:' . $accent['dark']
+             . ';--color-primary-light:' . $accent['light'] . ';--color-primary-lighter:' . $accent['light']
+             . ';--color-primary-soft:' . $accent['soft'] . ';}</style>';
+    }
+
     /**
      * Generate a cache-busted URL for a static resource
      */
@@ -50,16 +76,23 @@ class ApplicationUI {
         $script = $_SERVER['SCRIPT_NAME'] ?? '';
         $siteTitle = Settings::siteTitle();
 
+        $mySite = $u ? SiteManagement::findByUserId((int)$u['id']) : null;
+        $themeSite = self::$themeSite;
+        if ($themeSite === null) {
+            $resolved = SiteResolver::resolveFromRequest();
+            $themeSite = ($resolved['site'] !== null && $resolved['is_custom_domain']) ? $resolved['site'] : $mySite;
+        }
+
         echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
         echo self::cssLink('/styles.css');
+        echo self::siteThemeStyle($themeSite);
         echo '</head><body>';
 
         if ($u) {
             $navItems = [
                 ['path' => '/manage/', 'label' => 'Manage', 'prefixes' => ['/manage/']],
             ];
-            $mySite = SiteManagement::findByUserId((int)$u['id']);
             if ($mySite) {
                 $navItems[] = ['path' => SiteResolver::publicHomeUrl($mySite), 'label' => 'My Site', 'prefixes' => ['/public_site.php']];
             }

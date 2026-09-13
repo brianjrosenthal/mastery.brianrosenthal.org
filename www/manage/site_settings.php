@@ -26,6 +26,7 @@ $err = $stash['err'] ?? ($_GET['err'] ?? null);
 $msg = $_GET['msg'] ?? null;
 $userId = (int)$site['user_id'];
 
+ApplicationUI::useSiteTheme($site);
 header_html('Site settings');
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › Site settings</div>

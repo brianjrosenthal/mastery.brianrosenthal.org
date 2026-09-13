@@ -26,6 +26,7 @@ $err = $stash['err'];
 $msg = $_GET['msg'] ?? null;
 $subcategoryCount = count(SubcategoryManagement::listForCategory($id));
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('Edit ' . $cat['name']);
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <?=h($cat['name'])?></div>

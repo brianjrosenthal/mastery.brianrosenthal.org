@@ -23,6 +23,7 @@ $stash = ManageUI::takeForm('subcategory_add_' . $categoryId);
 $form = $stash['data'] + ['name' => '', 'slug' => '', 'description_markdown' => ''];
 $err = $stash['err'];
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('New subcategory');
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <a href="/manage/category_edit.php?id=<?= $categoryId ?>"><?=h($cat['name'])?></a> › New subcategory</div>

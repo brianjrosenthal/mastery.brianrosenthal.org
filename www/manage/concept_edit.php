@@ -31,6 +31,7 @@ $err = $stash['err'] ?? ($_GET['err'] ?? null);
 $msg = $_GET['msg'] ?? null;
 $published = !empty($concept['is_published']);
 
+ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('Edit ' . $concept['title']);
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <a href="/manage/category_edit.php?id=<?= (int)$concept['category_id'] ?>"><?=h($concept['category_name'])?></a> › <a href="/manage/subcategory_edit.php?id=<?= (int)$concept['subcategory_id'] ?>"><?=h($concept['subcategory_name'])?></a> › <?=h($concept['title'])?></div>

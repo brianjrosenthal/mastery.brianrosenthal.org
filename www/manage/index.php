@@ -16,6 +16,7 @@ $isMe = ((int)$me['id'] === $userId);
 $msg = $_GET['msg'] ?? null;
 $err = $_GET['err'] ?? null;
 
+ApplicationUI::useSiteTheme($site);
 header_html($isMe ? 'My Site' : 'Manage ' . $target['first_name']);
 ?>
 
