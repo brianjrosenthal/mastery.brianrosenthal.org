@@ -111,10 +111,20 @@ final class ConceptManagement {
         return $st->fetchAll();
     }
 
-    /** Every concept row that has a video, for the storage diagnostics page. */
-    public static function listVideoObjectKeys(): array {
-        $rows = self::pdo()->query('SELECT video_object_key FROM concepts WHERE video_object_key IS NOT NULL')->fetchAll();
-        return array_map(static fn(array $r): string => (string)$r['video_object_key'], $rows);
+    /**
+     * Every video object key recorded on a concept, for the storage
+     * diagnostics page — all of them, or only those held by one provider.
+     * @return string[]
+     */
+    public static function listVideoObjectKeys(?string $provider = null): array {
+        $rows = self::pdo()->query('SELECT video_object_key, video_storage FROM concepts WHERE video_object_key IS NOT NULL')->fetchAll();
+        $keys = [];
+        foreach ($rows as $r) {
+            if ($provider === null || VideoStorage::providerOf($r) === $provider) {
+                $keys[] = (string)$r['video_object_key'];
+            }
+        }
+        return $keys;
     }
 
     public static function slugExists(int $subcategoryId, string $slug, ?int $exceptId = null): bool {
@@ -204,10 +214,10 @@ final class ConceptManagement {
     }
 
     /**
-     * Record a video the browser has finished uploading to storage. The caller
-     * (concept_video_attach_eval.php) has already verified the object with
-     * VideoStorage::verifyUploadedObject(). A previous video is deleted from
-     * storage, best effort.
+     * Record a video the browser has finished uploading to the active storage
+     * provider. The caller (concept_video_attach_eval.php) has already
+     * verified the object with VideoStorage::verifyUploadedObject(). A
+     * previous video is deleted from whichever provider held it, best effort.
      */
     public static function attachVideo(?UserContext $ctx, int $id, string $objectKey, string $contentType, int $sizeBytes): void {
         $concept = self::findById($id);
@@ -220,19 +230,21 @@ final class ConceptManagement {
         }
 
         $previous = (string)($concept['video_object_key'] ?? '');
+        $previousProvider = VideoStorage::providerOf($concept);
+        $provider = VideoStorage::activeProvider();
 
         $st = self::pdo()->prepare(
-            'UPDATE concepts SET video_object_key = ?, video_content_type = ?, video_size_bytes = ?, video_uploaded_at = NOW()
+            'UPDATE concepts SET video_object_key = ?, video_storage = ?, video_content_type = ?, video_size_bytes = ?, video_uploaded_at = NOW()
              WHERE id = ?'
         );
-        $st->execute([$objectKey, $contentType, $sizeBytes, $id]);
-        self::log('concept.video_attach', ['concept_id' => $id, 'object_key' => $objectKey, 'size_bytes' => $sizeBytes]);
+        $st->execute([$objectKey, $provider, $contentType, $sizeBytes, $id]);
+        self::log('concept.video_attach', ['concept_id' => $id, 'object_key' => $objectKey, 'provider' => $provider, 'size_bytes' => $sizeBytes]);
 
-        if ($previous !== '' && $previous !== $objectKey) {
+        if ($previous !== '' && ($previous !== $objectKey || $previousProvider !== $provider)) {
             try {
-                VideoStorage::deleteObject($previous);
+                VideoStorage::deleteObject($previous, $previousProvider);
             } catch (\Throwable $e) {
-                self::log('concept.video_delete_failed', ['concept_id' => $id, 'object_key' => $previous, 'error' => $e->getMessage()]);
+                self::log('concept.video_delete_failed', ['concept_id' => $id, 'object_key' => $previous, 'provider' => $previousProvider, 'error' => $e->getMessage()]);
             }
         }
     }
@@ -251,14 +263,15 @@ final class ConceptManagement {
 
         // Storage first: if the delete fails the row still points at a real
         // object and the user can retry; the reverse would leak the object.
-        VideoStorage::deleteObject($key);
+        $provider = VideoStorage::providerOf($concept);
+        VideoStorage::deleteObject($key, $provider);
 
         $st = self::pdo()->prepare(
-            'UPDATE concepts SET video_object_key = NULL, video_content_type = NULL, video_size_bytes = NULL, video_uploaded_at = NULL
+            'UPDATE concepts SET video_object_key = NULL, video_storage = NULL, video_content_type = NULL, video_size_bytes = NULL, video_uploaded_at = NULL
              WHERE id = ?'
         );
         $st->execute([$id]);
-        self::log('concept.video_detach', ['concept_id' => $id, 'object_key' => $key]);
+        self::log('concept.video_detach', ['concept_id' => $id, 'object_key' => $key, 'provider' => $provider]);
     }
 
     /** Delete a concept (and its resources via cascade, and its video from storage). */
@@ -271,7 +284,7 @@ final class ConceptManagement {
 
         $key = (string)($concept['video_object_key'] ?? '');
         if ($key !== '') {
-            VideoStorage::deleteObject($key);
+            VideoStorage::deleteObject($key, VideoStorage::providerOf($concept));
         }
 
         $st = self::pdo()->prepare('DELETE FROM concepts WHERE id = ?');

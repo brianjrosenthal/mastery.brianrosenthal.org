@@ -18,9 +18,18 @@ final class ConceptManagementTest extends TestCase
         // The seed tree already holds one concept; tests add their own.
     }
 
-    private function storage(): FakeDreamObjects
+    /** The fake behind the ACTIVE provider (where uploads go). */
+    private function storage(): FakeS3Client
     {
         return VideoStorage::storage();
+    }
+
+    /** Make a concept look like it was uploaded before the move to R2. */
+    private function seedLegacyVideo(int $conceptId, string $key): void
+    {
+        VideoStorage::storage('dreamobjects')->seedObject(VideoStorage::bucket('dreamobjects'), $key, 4321, 'video/mp4');
+        pdo()->prepare("UPDATE concepts SET video_object_key = ?, video_storage = 'dreamobjects', video_content_type = 'video/mp4', video_size_bytes = 4321, video_uploaded_at = NOW() WHERE id = ?")
+            ->execute([$key, $conceptId]);
     }
 
     public function testCreateWithResourcesAndPublishNow(): void
@@ -144,6 +153,7 @@ final class ConceptManagementTest extends TestCase
         ConceptManagement::attachVideo($this->charlie, $id, $key1, 'video/mp4', 5000);
         $c = ConceptManagement::findById($id);
         $this->assertSame($key1, $c['video_object_key']);
+        $this->assertSame('r2', $c['video_storage'], 'new uploads record the active provider');
         $this->assertSame(5000, (int)$c['video_size_bytes']);
         $this->assertNotNull($c['video_uploaded_at']);
 
@@ -174,6 +184,7 @@ final class ConceptManagementTest extends TestCase
         ConceptManagement::detachVideo($this->charlie, $id);
         $c = ConceptManagement::findById($id);
         $this->assertNull($c['video_object_key']);
+        $this->assertNull($c['video_storage']);
         $this->assertNull($c['video_size_bytes']);
         $this->assertFalse($this->storage()->objectExists(VideoStorage::bucket(), $key));
         ConceptManagement::detachVideo($this->charlie, $id); // no video: no-op
@@ -209,5 +220,46 @@ final class ConceptManagementTest extends TestCase
         $types = array_column(ActivityLog::list([], 20), 'action_type');
         $this->assertContains('concept.delete', $types);
         $this->assertContains('concept.video_attach', $types);
+    }
+
+    // --- videos still in the previous provider ---------------------------
+
+    public function testLegacyVideoIsDeletedFromItsOwnProviderWhenReplacedOrDetached(): void
+    {
+        $id = ConceptManagement::create($this->charlie, $this->subcategoryId, ['title' => 'Old video']);
+        $legacy = VideoStorage::newObjectKeyFor($this->charlie->id, $id, 'video/mp4');
+        $this->seedLegacyVideo($id, $legacy);
+        $dream = VideoStorage::storage('dreamobjects');
+        $this->assertSame([$legacy], ConceptManagement::listVideoObjectKeys('dreamobjects'));
+        $this->assertSame([], ConceptManagement::listVideoObjectKeys('r2'));
+
+        // Replacing: the new object goes to R2, the old one is removed from DreamObjects.
+        $fresh = VideoStorage::newObjectKeyFor($this->charlie->id, $id, 'video/mp4');
+        $this->storage()->seedObject(VideoStorage::bucket(), $fresh, 10, 'video/mp4');
+        ConceptManagement::attachVideo($this->charlie, $id, $fresh, 'video/mp4', 10);
+        $c = ConceptManagement::findById($id);
+        $this->assertSame(['r2', $fresh], [$c['video_storage'], $c['video_object_key']]);
+        $this->assertFalse($dream->objectExists(VideoStorage::bucket('dreamobjects'), $legacy), 'old object deleted from the provider that held it');
+        $this->assertTrue($this->storage()->objectExists(VideoStorage::bucket(), $fresh));
+
+        // Detaching a legacy video deletes it from DreamObjects, not R2.
+        $id2 = ConceptManagement::create($this->charlie, $this->subcategoryId, ['title' => 'Another old video']);
+        $legacy2 = VideoStorage::newObjectKeyFor($this->charlie->id, $id2, 'video/mp4');
+        $this->seedLegacyVideo($id2, $legacy2);
+        $r2CallsBefore = $this->storage()->calls['delete'] ?? 0;
+        ConceptManagement::detachVideo($this->charlie, $id2);
+        $this->assertFalse($dream->objectExists(VideoStorage::bucket('dreamobjects'), $legacy2));
+        $this->assertSame($r2CallsBefore, $this->storage()->calls['delete'] ?? 0, 'R2 was not asked to delete anything');
+        $this->assertNull(ConceptManagement::findById($id2)['video_storage']);
+    }
+
+    public function testDeletingAConceptRemovesALegacyVideoFromItsProvider(): void
+    {
+        $id = ConceptManagement::create($this->charlie, $this->subcategoryId, ['title' => 'Old video']);
+        $legacy = VideoStorage::newObjectKeyFor($this->charlie->id, $id, 'video/mp4');
+        $this->seedLegacyVideo($id, $legacy);
+        ConceptManagement::delete($this->charlie, $id);
+        $this->assertNull(ConceptManagement::findById($id));
+        $this->assertFalse(VideoStorage::storage('dreamobjects')->objectExists(VideoStorage::bucket('dreamobjects'), $legacy));
     }
 }

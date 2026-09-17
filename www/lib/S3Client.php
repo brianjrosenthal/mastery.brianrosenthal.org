@@ -1,32 +1,33 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../config.php';
-
 /**
- * DreamHost DreamObjects client — the S3-compatible (Ceph RGW) object store that
- * holds concept videos. Ported from hackleyclubz.org, plus what video uploads
- * need: presigned PUT URLs (so the browser uploads straight to the bucket),
- * HEAD (to verify an upload), bucket CORS (so browsers may PUT), and plain
- * public URLs for playback.
+ * Minimal S3-compatible object storage client: the one class that talks to
+ * whichever bucket holds concept videos. Two providers are in use:
+ *
+ *   - Cloudflare R2 (endpoint https://{account}.r2.cloudflarestorage.com,
+ *     region "auto"), where new uploads go; and
+ *   - DreamHost DreamObjects (Ceph RGW), where videos lived before the move
+ *     to R2. Kept for playback until every video has been migrated
+ *     (deploy/migrate-videos.php) and for the migration itself.
+ *
+ * Both speak the same API, so VideoStorage constructs one instance per
+ * provider from its own endpoint/keys and the code below is provider-blind:
+ * presigned PUT URLs (so the browser uploads straight to the bucket), HEAD (to
+ * verify an upload), bucket CORS (so browsers may PUT), presigned GET URLs for
+ * playback, listing and deletion.
  *
  * Why hand-rolled rather than aws/aws-sdk-php: the app has no Composer and no
  * vendor/ directory, and it needs under a dozen operations. AWS Signature V4 is
  * a few dozen lines of HMAC, so the dependency isn't worth introducing.
  *
- * Configuration (config.local.php):
- *   DREAMOBJECTS_ENDPOINT      e.g. 'https://objects-us-east-1.dream.io'
- *   DREAMOBJECTS_REGION        e.g. 'us-east-1'
- *   DREAMOBJECTS_ACCESS_KEY    access key id
- *   DREAMOBJECTS_SECRET_KEY    secret access key (never leaves the server)
- *   DREAMOBJECTS_VIDEO_BUCKET  the bucket for this environment
- *
  * Two notes on the request style:
  *
  *  - PATH-STYLE addressing (/{bucket}/{key}) is used throughout rather than
- *    virtual-host style ({bucket}.host/{key}). Ceph RGW supports path-style
- *    unconditionally, whereas virtual-host style needs wildcard DNS on the
- *    endpoint, which DreamObjects does not guarantee for every bucket name.
+ *    virtual-host style ({bucket}.host/{key}). Both R2 and Ceph RGW support
+ *    path-style unconditionally, whereas virtual-host style needs wildcard DNS
+ *    on the endpoint, which DreamObjects does not guarantee for every bucket
+ *    name.
  *
  *  - For S3, the canonical URI is single-encoded (unlike other AWS services,
  *    which double-encode). encodePath() below therefore encodes each path
@@ -34,9 +35,9 @@ require_once __DIR__ . '/../config.php';
  *
  * Not final (unlike the other lib classes) so tests can override the single
  * protected send() method and prove that presigning performs no network I/O —
- * see DreamObjectsSignerTest. send() is the only intended extension point.
+ * see S3ClientSignerTest. send() is the only intended extension point.
  */
-class DreamObjects {
+class S3Client {
 
     /** SigV4 service name. */
     private const SERVICE = 's3';
@@ -71,41 +72,16 @@ class DreamObjects {
     private string $accessKey;
     private string $secretKey;
 
-    /**
-     * Construct from explicit credentials, or from the config constants when
-     * omitted (the normal case).
-     */
-    public function __construct(
-        ?string $endpoint  = null,
-        ?string $region    = null,
-        ?string $accessKey = null,
-        ?string $secretKey = null
-    ) {
-        $this->endpoint  = rtrim($endpoint ?? (defined('DREAMOBJECTS_ENDPOINT') ? DREAMOBJECTS_ENDPOINT : ''), '/');
-        $this->region    = $region    ?? (defined('DREAMOBJECTS_REGION')     ? DREAMOBJECTS_REGION     : '');
-        $this->accessKey = $accessKey ?? (defined('DREAMOBJECTS_ACCESS_KEY') ? DREAMOBJECTS_ACCESS_KEY : '');
-        $this->secretKey = $secretKey ?? (defined('DREAMOBJECTS_SECRET_KEY') ? DREAMOBJECTS_SECRET_KEY : '');
+    public function __construct(string $endpoint, string $region, string $accessKey, string $secretKey) {
+        $this->endpoint  = rtrim($endpoint, '/');
+        $this->region    = $region;
+        $this->accessKey = $accessKey;
+        $this->secretKey = $secretKey;
     }
 
-    // -------------------------------------------------------------------------
-    // Configuration
-    // -------------------------------------------------------------------------
-
-    /**
-     * Whether video storage is configured. Video upload UI hides itself when
-     * this is false, so an environment with no DreamObjects credentials
-     * degrades quietly instead of erroring on every page.
-     */
-    public static function isConfigured(): bool {
-        return defined('DREAMOBJECTS_ACCESS_KEY') && DREAMOBJECTS_ACCESS_KEY !== ''
-            && defined('DREAMOBJECTS_SECRET_KEY') && DREAMOBJECTS_SECRET_KEY !== ''
-            && defined('DREAMOBJECTS_ENDPOINT')   && DREAMOBJECTS_ENDPOINT   !== ''
-            && self::videoBucket() !== '';
-    }
-
-    /** Bucket holding concept videos for this environment. */
-    public static function videoBucket(): string {
-        return defined('DREAMOBJECTS_VIDEO_BUCKET') ? DREAMOBJECTS_VIDEO_BUCKET : '';
+    /** The endpoint this client talks to, e.g. 'https://objects-us-east-1.dream.io'. */
+    public function endpoint(): string {
+        return $this->endpoint;
     }
 
     /** Plain (unsigned) URL of an object — only useful for objects that are readable without auth. */
@@ -188,7 +164,7 @@ class DreamObjects {
 
         foreach (array_chunk($keys, self::DELETE_BATCH_SIZE) as $batch) {
             // The multi-object delete API is a POST to /{bucket}?delete with an
-            // XML body. Ceph, like S3, requires Content-MD5 on this request.
+            // XML body. Ceph, like S3, requires Content-MD5 on this request (R2 accepts it).
             $xml = '<?xml version="1.0" encoding="UTF-8"?><Delete><Quiet>true</Quiet>';
             foreach ($batch as $k) {
                 $xml .= '<Object><Key>' . htmlspecialchars($k, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</Key></Object>';
@@ -406,11 +382,11 @@ class DreamObjects {
     /**
      * Create a bucket unless it already exists. The bucket and its objects stay
      * private: the public site plays videos through presigned GET URLs
-     * (DreamObjects rejects canned ACLs such as public-read).
+     * (DreamObjects rejects canned ACLs such as public-read; R2 has none).
      *
      * @return bool True if a bucket was created, false if it already existed.
-     * @throws \RuntimeException on failure (including a name taken by another
-     *                           DreamObjects account — names are globally unique).
+     * @throws \RuntimeException on failure (including, on DreamObjects, a name
+     *                           taken by another account — names are global there).
      */
     public function createBucketIfMissing(string $bucket): bool {
         if ($this->bucketExists($bucket)) {
@@ -419,7 +395,7 @@ class DreamObjects {
 
         [$status, $body] = $this->request('PUT', $bucket, '');
 
-        // Ceph returns these when the bucket is already ours; treat as success.
+        // Ceph and R2 return this when the bucket is already ours; treat as success.
         if ($status === 409 && str_contains($body, 'BucketAlreadyOwnedByYou')) {
             return false;
         }
@@ -469,7 +445,8 @@ class DreamObjects {
 
     /**
      * Replace the bucket's CORS configuration so browsers on $origins may
-     * upload directly. Ceph, like S3, requires Content-MD5 on this request.
+     * upload directly. Ceph, like S3, requires Content-MD5 on this request
+     * (R2 accepts it).
      *
      * @param string[] $origins
      * @throws \RuntimeException on failure.

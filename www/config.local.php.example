@@ -32,16 +32,35 @@ define('SMTP_FROM_NAME', 'Mastery');   // From name seen in emails
 // Set to a long random string, e.g., bin2hex(random_bytes(32)).
 define('REMEMBER_TOKEN_KEY', '');
 
-// ---- Video storage: DreamHost DreamObjects (S3-compatible) ----
+// ---- Video storage ----
 // Videos never touch this server: the browser uploads straight to the bucket
 // using a short-lived URL signed by PHP with the secret key below, and the
 // public site plays them back through signed URLs (objects stay private).
 // Create the bucket and apply CORS from Admin -> Video Storage once these are
 // filled in, then click "Test upload" there.
+//
+// Which provider NEW uploads go to: 'r2' (Cloudflare R2) or 'dreamobjects'.
+// Each concept remembers which provider holds its video, so both can be
+// configured at once while videos are migrated (deploy/migrate-videos.php).
+define('VIDEO_STORAGE_PROVIDER', 'r2');
+
+// Cloudflare R2 (S3-compatible). Dashboard -> R2 Object Storage -> the bucket
+// -> Settings shows the "S3 API" URL; paste it as R2_ENDPOINT (with or without
+// the trailing /bucket-name). Keys: R2 -> Manage R2 API Tokens -> Create API
+// token with "Object Read & Write" on this bucket.
+define('R2_ENDPOINT', 'https://<account-id>.r2.cloudflarestorage.com');
+define('R2_ACCESS_KEY', '');   // empty = video uploads disabled (when R2 is the active provider)
+define('R2_SECRET_KEY', '');
+define('R2_VIDEO_BUCKET', 'mastery-videos');
+// define('R2_REGION', 'auto');  // default 'auto'; R2 also accepts a jurisdiction such as 'eu'
+
+// DreamHost DreamObjects (Ceph, S3-compatible) — the previous provider. Only
+// needed while some videos are still there: playback and the migration read
+// from it. Remove once Admin -> Video Storage shows nothing left in it.
 // Keys: DreamHost panel -> Cloud Services -> DreamObjects -> Users -> Keys.
 define('DREAMOBJECTS_ENDPOINT', 'https://objects-us-east-1.dream.io');
 define('DREAMOBJECTS_REGION', 'us-east-1');
-define('DREAMOBJECTS_ACCESS_KEY', '');   // empty = video uploads disabled
+define('DREAMOBJECTS_ACCESS_KEY', '');
 define('DREAMOBJECTS_SECRET_KEY', '');
 define('DREAMOBJECTS_VIDEO_BUCKET', 'mastery-videos'); // bucket names are globally unique
 

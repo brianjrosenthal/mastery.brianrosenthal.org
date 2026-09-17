@@ -4,27 +4,27 @@ declare(strict_types=1);
 use PHPUnit\Framework\TestCase;
 
 /**
- * Unit tests for DreamObjects' AWS Signature V4 implementation.
+ * Unit tests for S3Client's AWS Signature V4 implementation.
  *
  * The headline test checks the whole signing chain against the signature AWS
  * publishes for its presigned-URL example ("Example: Signature calculation for
  * presigned URL"), which pins the HMAC key derivation, the string-to-sign format,
  * and query canonicalization all at once. Getting any of them subtly wrong
- * produces a signature that DreamObjects rejects with an opaque 403, so it is
+ * produces a signature that R2 or DreamObjects rejects with an opaque 403, so it is
  * worth locking down precisely.
  *
- * Everything here is pure computation — see NonNetworkDreamObjects, which fails
+ * Everything here is pure computation — see NonNetworkS3Client, which fails
  * the test if presigning ever reaches the network.
  */
-final class DreamObjectsSignerTest extends TestCase {
+final class S3ClientSignerTest extends TestCase {
 
     /** Credentials from AWS's published SigV4 examples. */
     private const EXAMPLE_ACCESS_KEY = 'AKIAIOSFODNN7EXAMPLE';
     private const EXAMPLE_SECRET_KEY = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
 
-    /** A DreamObjects pointed at DreamHost's real endpoint shape. */
-    private function client(): DreamObjects {
-        return new NonNetworkDreamObjects(
+    /** An S3Client pointed at DreamHost's real endpoint shape. */
+    private function client(): S3Client {
+        return new NonNetworkS3Client(
             'https://s3.us-east-005.dream.io',
             'us-east-005',
             'AKIAEXAMPLEKEY000000',
@@ -33,7 +33,7 @@ final class DreamObjectsSignerTest extends TestCase {
     }
 
     /** Call a private/protected method. */
-    private function invoke(DreamObjects $client, string $method, array $args = []): mixed {
+    private function invoke(S3Client $client, string $method, array $args = []): mixed {
         $ref = new \ReflectionMethod($client, $method);
         return $ref->invokeArgs($client, $args);
     }
@@ -44,7 +44,7 @@ final class DreamObjectsSignerTest extends TestCase {
         // AWS's example is virtual-host style (host carries the bucket), so the
         // canonical request is built here to match the documented one exactly;
         // what is under test is the signing chain, which is style-independent.
-        $client = new NonNetworkDreamObjects(
+        $client = new NonNetworkS3Client(
             'https://examplebucket.s3.amazonaws.com',
             'us-east-1',
             self::EXAMPLE_ACCESS_KEY,
@@ -201,7 +201,7 @@ final class DreamObjectsSignerTest extends TestCase {
         $plainPut = $client->presignedPutUrl('mastery-videos', 'videos/3/17/abc.mp4', 1774526400, 900);
         $this->assertNotSame($this->signatureOf($get), $this->signatureOf($url));
         $this->assertNotSame($this->signatureOf($plainPut), $this->signatureOf($url));
-        $this->assertSame(0, NonNetworkDreamObjects::$sendCalls);
+        $this->assertSame(0, NonNetworkS3Client::$sendCalls);
     }
 
     public function testPresignedPutMatchesManualCanonicalRequest(): void {
@@ -236,7 +236,7 @@ final class DreamObjectsSignerTest extends TestCase {
     }
 
     public function testCorsConfigurationXml(): void {
-        $xml = DreamObjects::corsConfigurationXml(['https://mastery.brianrosenthal.org', 'http://localhost:8080']);
+        $xml = S3Client::corsConfigurationXml(['https://mastery.brianrosenthal.org', 'http://localhost:8080']);
         $parsed = simplexml_load_string($xml);
         $this->assertNotFalse($parsed);
         $rule = $parsed->CORSRule;
@@ -255,14 +255,14 @@ final class DreamObjectsSignerTest extends TestCase {
     // ── No network I/O ──────────────────────────────────────────────────────
 
     public function testPresigningNeverTouchesTheNetwork(): void {
-        // NonNetworkDreamObjects::send() fails the test if it is ever reached.
+        // NonNetworkS3Client::send() fails the test if it is ever reached.
         // Presigning is called once per gallery tile, so a stray HEAD/GET in here
         // would turn a 60-photo page into 60 round trips.
         $client = $this->client();
         for ($i = 0; $i < 25; $i++) {
             $client->presignedGetUrl('bucket', "videos/1/$i/abc.mp4", 1774526400, 14400);
         }
-        $this->assertSame(0, NonNetworkDreamObjects::$sendCalls);
+        $this->assertSame(0, NonNetworkS3Client::$sendCalls);
     }
 
     // ── Canonicalization details ────────────────────────────────────────────
@@ -307,10 +307,10 @@ final class DreamObjectsSignerTest extends TestCase {
     }
 
     public function testHostIncludesNonDefaultPort(): void {
-        $withPort = new NonNetworkDreamObjects('https://storage.example:8443', 'r', 'a', 's');
+        $withPort = new NonNetworkS3Client('https://storage.example:8443', 'r', 'a', 's');
         $this->assertSame('storage.example:8443', $this->invoke($withPort, 'host'));
 
-        $plain = new NonNetworkDreamObjects('https://storage.example', 'r', 'a', 's');
+        $plain = new NonNetworkS3Client('https://storage.example', 'r', 'a', 's');
         $this->assertSame('storage.example', $this->invoke($plain, 'host'));
     }
 
@@ -328,7 +328,7 @@ final class DreamObjectsSignerTest extends TestCase {
     // ── Configuration gate ──────────────────────────────────────────────────
 
     public function testUnconfiguredClientRefusesRequestsWithAClearMessage(): void {
-        $client = new NonNetworkDreamObjects('', '', '', '');
+        $client = new NonNetworkS3Client('', '', '', '');
 
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('not configured');
@@ -337,10 +337,10 @@ final class DreamObjectsSignerTest extends TestCase {
 }
 
 /**
- * A DreamObjects whose HTTP layer is disabled: any attempt to reach the network
+ * An S3Client whose HTTP layer is disabled: any attempt to reach the network
  * throws. Used to prove presignedGetUrl() is pure local computation.
  */
-final class NonNetworkDreamObjects extends DreamObjects {
+final class NonNetworkS3Client extends S3Client {
 
     public static int $sendCalls = 0;
 

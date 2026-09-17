@@ -215,7 +215,8 @@ final class MigrationRunner {
             DB_PASS,
             [
                 \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
-                \PDO::MYSQL_ATTR_MULTI_STATEMENTS => true,
+                // PHP 8.4 moved the driver constants to Pdo\Mysql; the old name is deprecated from 8.5.
+                (class_exists('Pdo\\Mysql') ? \Pdo\Mysql::ATTR_MULTI_STATEMENTS : \PDO::MYSQL_ATTR_MULTI_STATEMENTS) => true,
             ]
         );
         $stmt = $pdo->query($sql);

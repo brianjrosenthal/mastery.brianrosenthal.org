@@ -214,11 +214,11 @@ final class ManageUI {
         $html .= '<h3 id="video">Video</h3>';
 
         if ($key !== '') {
-            $src = VideoStorage::playbackUrlFor($key);
+            $src = VideoStorage::playbackUrlForConcept($concept);
             $html .= '<div class="video-current">'
                    . '<video controls playsinline preload="metadata" src="' . h($src) . '"></video>'
                    . '<p class="small">' . h(VideoStorage::humanBytes((int)$concept['video_size_bytes'])) . ' · '
-                   . h((string)$concept['video_content_type']) . ' · uploaded '
+                   . h((string)$concept['video_content_type']) . ' · ' . h(VideoStorage::providerLabel(VideoStorage::providerOf($concept))) . ' · uploaded '
                    . h(date('M j, Y g:i A', strtotime((string)$concept['video_uploaded_at']))) . '</p>'
                    . '<form method="post" action="/manage/concept_video_remove_eval.php" class="actions">'
                    . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'

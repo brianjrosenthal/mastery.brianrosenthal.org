@@ -84,7 +84,9 @@ CREATE TABLE schema_migrations (
   applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
-INSERT IGNORE INTO schema_migrations (filename) VALUES ('001_initial_schema.sql');
+INSERT IGNORE INTO schema_migrations (filename) VALUES
+  ('001_initial_schema.sql'),
+  ('002_concept_video_storage.sql');
 
 -- ===== Sites =====
 -- One public site per user: its branding and homepage, the slug that serves
@@ -147,9 +149,11 @@ CREATE INDEX idx_subcategories_category_sort ON subcategories(category_id, sort_
 -- ===== Concepts =====
 -- The unit of mastery, e.g. "Derivation of e^x": a video, a Markdown
 -- description and supporting links. Only published concepts appear on the
--- public site. The video itself lives in DreamObjects; the row stores just
--- the object key (videos/{user_id}/{concept_id}/{random}.{ext}) and what the
--- server verified about it after the upload.
+-- public site. The video itself lives in object storage (Cloudflare R2 for
+-- new uploads; DreamHost DreamObjects for videos not yet migrated); the row
+-- stores just the provider, the object key
+-- (videos/{user_id}/{concept_id}/{random}.{ext}) and what the server verified
+-- about it after the upload.
 CREATE TABLE concepts (
   id INT AUTO_INCREMENT PRIMARY KEY,
   subcategory_id INT NOT NULL,
@@ -159,6 +163,7 @@ CREATE TABLE concepts (
   is_published TINYINT(1) NOT NULL DEFAULT 0,
   published_at DATETIME DEFAULT NULL,
   video_object_key VARCHAR(255) DEFAULT NULL,
+  video_storage VARCHAR(20) DEFAULT NULL COMMENT 'Provider holding video_object_key: r2 or dreamobjects; NULL when no video',
   video_content_type VARCHAR(100) DEFAULT NULL,
   video_size_bytes BIGINT UNSIGNED DEFAULT NULL,
   video_uploaded_at DATETIME DEFAULT NULL,

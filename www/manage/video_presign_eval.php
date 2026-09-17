@@ -1,8 +1,8 @@
 <?php
 // AJAX (POST, JSON): hands the browser a presigned URL to PUT one video
-// straight into DreamObjects for a concept the caller may edit. The secret
-// key never leaves the server; the URL authorizes exactly one object key for
-// VideoStorage::UPLOAD_URL_TTL seconds.
+// straight into the active storage provider (Cloudflare R2) for a concept the
+// caller may edit. The secret key never leaves the server; the URL authorizes
+// exactly one object key for VideoStorage::UPLOAD_URL_TTL seconds.
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../lib/Application.php';
 require_once __DIR__ . '/../lib/ContentAccess.php';
@@ -57,8 +57,8 @@ if ($size > VideoStorage::maxBytes()) {
 try {
     $key = VideoStorage::newObjectKeyFor($ownerId, $conceptId, $contentType);
     $upload = VideoStorage::presignUploadFor($key, $contentType);
-    ActivityLog::log($ctx, 'concept.video_presign', ['concept_id' => $conceptId, 'object_key' => $key, 'size_bytes' => $size]);
-    echo json_encode(['ok' => true, 'key' => $key, 'url' => $upload['url'], 'headers' => $upload['headers'], 'expires_in' => $upload['expires_in']]);
+    ActivityLog::log($ctx, 'concept.video_presign', ['concept_id' => $conceptId, 'object_key' => $key, 'provider' => $upload['provider'], 'size_bytes' => $size]);
+    echo json_encode(['ok' => true, 'key' => $key, 'provider' => $upload['provider'], 'url' => $upload['url'], 'headers' => $upload['headers'], 'expires_in' => $upload['expires_in']]);
 } catch (Throwable $e) {
     presign_fail('Could not prepare the upload: ' . $e->getMessage(), 500);
 }

@@ -26,13 +26,38 @@ final class MigrationRunnerTest extends TestCase
         $this->assertSame(array_values($sorted), $files);
     }
 
-    public function testInitialMigrationMatchesSchema(): void
+    public function testSchemaRecordsEveryMigrationAsAlreadyApplied(): void
     {
-        $this->assertSame(
-            file_get_contents(dirname(__DIR__, 3) . '/www/schema.sql'),
-            file_get_contents(MigrationRunner::dir() . '/001_initial_schema.sql'),
-            '001_initial_schema.sql must be a copy of schema.sql until a second migration exists'
-        );
+        // schema.sql is the complete current structure, so a fresh install must
+        // mark every db_migrations file as done or Admin -> Migrations would
+        // offer to re-run them.
+        $schema = (string)file_get_contents(dirname(__DIR__, 3) . '/www/schema.sql');
+        foreach (MigrationRunner::allFilenames() as $file) {
+            $this->assertStringContainsString("('" . $file . "')", $schema, "$file must be listed in schema.sql's schema_migrations insert");
+        }
+        $byName = array_column(MigrationRunner::status(), null, 'filename');
+        $this->assertTrue($byName['002_concept_video_storage.sql']['applied']);
+    }
+
+    public function testVideoStorageMigrationAddsTheColumnBackfillsAndIsIdempotent(): void
+    {
+        test_reset_all();
+        $admin = test_seed_admin();
+        $ids = test_seed_tree($admin);
+        $pdo = pdo();
+        // Pretend this database predates the column: drop it, leaving a video row.
+        $pdo->exec("UPDATE concepts SET video_object_key = 'videos/1/1/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.mp4' WHERE id = " . (int)$ids['concept_id']);
+        $pdo->exec('ALTER TABLE concepts DROP COLUMN video_storage');
+
+        $run = new ReflectionMethod(MigrationRunner::class, 'runFile');
+        $run->invoke(null, '002_concept_video_storage.sql');
+        $rows = $pdo->query('SELECT id, video_storage FROM concepts ORDER BY id')->fetchAll();
+        $this->assertSame('dreamobjects', $rows[0]['video_storage'], 'existing videos were all uploaded to DreamObjects');
+
+        $noVideo = ConceptManagement::create($admin, $ids['subcategory_id'], ['title' => 'No video']);
+        $run->invoke(null, '002_concept_video_storage.sql'); // second run: column exists, must not fail
+        $this->assertNull($pdo->query('SELECT video_storage FROM concepts WHERE id = ' . (int)$noVideo)->fetchColumn(), 'rows without a video stay NULL');
+        $this->assertSame('dreamobjects', $pdo->query('SELECT video_storage FROM concepts WHERE id = ' . (int)$ids['concept_id'])->fetchColumn());
     }
 
     public function testApplyRequiresAdminAndIgnoresUnknownFiles(): void

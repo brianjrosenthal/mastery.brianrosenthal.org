@@ -1,7 +1,8 @@
 // Video panel on the concept editor: upload a chosen file OR record in the
-// browser, then send the bytes STRAIGHT to DreamObjects with a presigned URL
-// minted by video_presign_eval.php, then tell concept_video_attach_eval.php
-// which key to record. The server never sees the video bytes.
+// browser, then send the bytes STRAIGHT to object storage (Cloudflare R2) with
+// a presigned URL minted by video_presign_eval.php, then tell
+// concept_video_attach_eval.php which key to record. The server never sees
+// the video bytes.
 //
 // XMLHttpRequest is used for the PUT because fetch() cannot report upload
 // progress, and a multi-hundred-MB upload with no progress bar looks hung.

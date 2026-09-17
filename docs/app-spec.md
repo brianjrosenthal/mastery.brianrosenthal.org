@@ -14,7 +14,8 @@ on all POSTs, dedicated single-purpose AJAX endpoint files).
 
 Per user: **Categories** ("Algebra II") → **Subcategories** ("Sequences and
 Series") → **Concepts** ("Derivation of e^x"). A concept has a video (in
-DreamObjects), a Markdown description, supporting links, and a published flag.
+object storage: Cloudflare R2, or DreamHost DreamObjects for videos not yet
+migrated), a Markdown description, supporting links, and a published flag.
 Categories and subcategories have a name, URL slug, Markdown description and a
 sort order. Each user has one **Site**: title, tagline, homepage Markdown,
 accent colour, public flag, a path slug and an optional custom domain.
@@ -70,19 +71,33 @@ back to the public page so saving returns there.
 1. Browser POSTs `{concept_id, content_type, size}` + CSRF to
    `video_presign_eval.php`; the server checks ownership, type and size and
    returns a presigned PUT URL for a fresh key `videos/{user}/{concept}/{random}.{ext}`.
-2. Browser PUTs the Blob straight to DreamObjects (XHR, so upload progress is
-   observable). No ACL header: DreamObjects rejects canned ACLs, so objects
-   stay private.
+2. Browser PUTs the Blob straight to the active storage provider (Cloudflare
+   R2; `VIDEO_STORAGE_PROVIDER`) with XHR, so upload progress is observable.
+   No ACL header: objects stay private (R2 default; DreamObjects rejects
+   canned ACLs).
 3. Browser POSTs the key to `concept_video_attach_eval.php`, which HEADs the
-   object to verify it, records it on the concept, deletes the previous
-   object, and returns the refreshed video panel as an HTML fragment.
+   object to verify it, records it on the concept together with the provider
+   (`concepts.video_storage`), deletes the previous object from whichever
+   provider held it, and returns the refreshed video panel as an HTML fragment.
 
 The secret key never leaves the server; a presigned URL authorizes exactly one
 key for 15 minutes. The bucket's CORS rule (applied from Admin → Video Storage)
-is limited to the site origins. Playback uses presigned GET URLs
-(`VideoStorage::playbackUrlFor`) whose timestamp is quantized to a 6-hour
-window (cacheable, byte-identical for every viewer in the window) with a
-24-hour lifetime.
+is limited to the site origins. Playback uses presigned GET URLs against the
+provider that holds the video (`VideoStorage::playbackUrlForConcept`) whose
+timestamp is quantized to a 6-hour window (cacheable, byte-identical for every
+viewer in the window) with a 24-hour lifetime.
+
+### Storage providers and migration
+
+`VideoStorage` knows two providers, `r2` and `dreamobjects`, each configured by
+its own `{R2,DREAMOBJECTS}_ENDPOINT/_ACCESS_KEY/_SECRET_KEY/_VIDEO_BUCKET`
+constants and served by its own `S3Client` (one hand-rolled SigV4 client for
+both, since both speak S3). Videos uploaded before the move to R2 are still in
+DreamObjects; `VideoMigration` copies a concept's video into the active
+provider under the same key, verifies the copy by size, then flips the row.
+`deploy/migrate-videos.php` runs that over every pending concept from a shell;
+Admin → Video Storage has a one-at-a-time button. Originals are kept until
+deleted as orphans.
 
 ## What an admin can do (Admin dropdown)
 
@@ -92,9 +107,11 @@ window (cacheable, byte-identical for every viewer in the window) with a
 - **Sites**: every site with its path and domain; links to its settings (where
   slug/domain are set) and its content.
 - **Settings**: site title, time zone, site URL (used in email links).
-- **Video Storage**: credentials check, create bucket, apply CORS for all site
-  origins, test upload (full PUT/HEAD/GET/delete cycle with the raw storage
-  response), bucket vs database reconciliation, delete orphans.
+- **Video Storage**: one card per provider (R2 active, DreamObjects previous):
+  credentials check, create bucket, apply CORS for all site origins, test
+  upload (full PUT/HEAD/GET/delete cycle with the raw storage response),
+  bucket vs database reconciliation, delete orphans; plus the migration
+  status and a "Migrate next video" button.
 - **Migrations**: `db_migrations/*.sql` with applied status from
   `schema_migrations`; apply pending ones. `db_migrations/migrate.sh` does the
   same from a shell.
@@ -124,8 +141,8 @@ deleted.
   (public chrome + fragments), `SitePages` (public page renderers),
   `ManageUI`, `SiteResolver`, `SiteManagement`, `CategoryManagement`,
   `SubcategoryManagement`, `ConceptManagement`, `ContentAccess`, `Slugger`,
-  `MarkdownRenderer` + vendored `Parsedown`, `DreamObjects` (SigV4 client),
-  `VideoStorage`, `MigrationRunner`, `UserContext`, `UserManagement`,
+  `MarkdownRenderer` + vendored `Parsedown`, `S3Client` (SigV4 client),
+  `VideoStorage`, `VideoMigration`, `MigrationRunner`, `UserContext`, `UserManagement`,
   `ActivityLog`, `EmailLog`.
 - `db_migrations/` — `NNN_description.sql`, `migrate.sh`, README.
 - `styles.css`, `main.js` — authoring/admin theme (kanchess colour scheme).
@@ -134,10 +151,10 @@ deleted.
 
 - Local: see CLAUDE.md. Tests: `php unit-tests/tools/phpunit.phar -c unit-tests/phpunit.xml`
   (real `_test` database rebuilt from schema.sql; storage faked by
-  `unit-tests/tests/Support/FakeDreamObjects.php`). No endpoint or UI tests, per
+  `unit-tests/tests/Support/FakeS3Client.php`, one per provider). No endpoint or UI tests, per
   the guidelines.
 - Production: DreamHost VPS, one Apache vhost with `ServerAlias` for all
-  hostnames, DreamObjects bucket with CORS. Full runbook in docs/deployment.md.
+  hostnames, Cloudflare R2 bucket with CORS. Full runbook in docs/deployment.md.
 
 ## Original request (historical)
 

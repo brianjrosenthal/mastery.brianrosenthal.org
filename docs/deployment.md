@@ -67,7 +67,7 @@ which never overwrites `config.local.php` or logs.
   `site_base_url` setting (Admin → Settings), so they always point at the main host.
 - `REMEMBER_TOKEN_KEY` — a long random string.
 - `SUPER_PASSWORD` — leave `''` in production.
-- `DREAMOBJECTS_*`, `VIDEO_MAX_BYTES` — see step 5.
+- `VIDEO_STORAGE_PROVIDER`, `R2_*`, `DREAMOBJECTS_*`, `VIDEO_MAX_BYTES` — see step 5.
 
 ## 3. Database
 
@@ -113,34 +113,79 @@ PHP needs `curl`, `mbstring`, `pdo_mysql` and `iconv`.
 2. Admin → Sites → that site's Settings → Routing → Custom domain.
 3. Admin → Video Storage → *Apply CORS for all site origins*.
 
-## 5. Video storage (DreamObjects)
+## 5. Video storage (Cloudflare R2)
 
-1. DreamHost panel → *Cloud Services → DreamObjects*. Create a user (or reuse
-   one) and note its access key and secret key.
-2. Put them in `config.local.php` as `DREAMOBJECTS_ACCESS_KEY` /
-   `DREAMOBJECTS_SECRET_KEY`, with `DREAMOBJECTS_ENDPOINT` /
-   `DREAMOBJECTS_REGION` for your cluster (e.g.
-   `https://objects-us-east-1.dream.io` / `us-east-1`) and a globally unique
-   `DREAMOBJECTS_VIDEO_BUCKET` name.
-3. In the app: Admin → Video Storage → **Create bucket**, then **Apply CORS for
-   all site origins**. The CORS rule is what lets a browser on each site PUT
-   directly to the bucket; re-apply it whenever a domain is added.
-4. Click **Test upload** on the same page; it should report success.
-5. Upload a test video from a concept editor and play it on the public page.
+Videos live in an S3-compatible bucket, not on the server. New uploads go to
+Cloudflare R2; DreamHost DreamObjects, the previous provider, is only needed
+while videos remain there (see *Migrating from DreamObjects* below).
+
+1. Cloudflare dashboard → *R2 Object Storage* → **Create bucket** named
+   `mastery-videos` (leave it private; no public access or custom domain is
+   needed, playback uses signed URLs). On the bucket's *Settings* tab copy the
+   **S3 API** URL, `https://<account-id>.r2.cloudflarestorage.com/mastery-videos`.
+2. *R2 Object Storage* → *Manage R2 API Tokens* → **Create API token**:
+   permission *Object Read & Write*, scoped to the `mastery-videos` bucket.
+   Copy the *Access Key ID* and *Secret Access Key* (shown once).
+3. In `config.local.php`: `VIDEO_STORAGE_PROVIDER = 'r2'`, the S3 API URL as
+   `R2_ENDPOINT` (with or without the trailing `/mastery-videos`, both work),
+   the two keys as `R2_ACCESS_KEY` / `R2_SECRET_KEY`, and
+   `R2_VIDEO_BUCKET = 'mastery-videos'`. Leave `R2_REGION` unset (`auto`).
+4. Admin → Video Storage: the Cloudflare R2 card should read *Ready*. Click
+   **Apply CORS for all site origins** (R2 accepts the same S3 CORS rule as
+   DreamObjects; it is what lets a browser on each site PUT directly to the
+   bucket) and re-apply it whenever a domain is added. **Create bucket** is
+   there too if you skipped step 1.
+5. Click **Test upload** on the same page; it should report success against
+   Cloudflare R2.
+6. Upload a test video from a concept editor and play it on the public page.
 
 How it stays secure: the secret key never leaves the server. For each upload,
 PHP signs a URL that authorizes one PUT to one object key for 15 minutes;
 after the upload PHP checks the object's type and size before recording it.
-Objects stay **private** (DreamObjects rejects canned ACLs such as
-`public-read`); the public site plays them through presigned GET URLs whose
-timestamp is rounded down to a 6-hour window, so browsers can cache the video,
-and which stay valid for 24 hours (`VIDEO_URL_WINDOW_SECONDS` /
-`VIDEO_URL_TTL_SECONDS`). Deleting a concept or replacing its video deletes
-the object.
+Objects stay **private** (R2 buckets are private unless you enable public
+access; DreamObjects rejects canned ACLs); the public site plays them through
+presigned GET URLs whose timestamp is rounded down to a 6-hour window, so
+browsers can cache the video, and which stay valid for 24 hours
+(`VIDEO_URL_WINDOW_SECONDS` / `VIDEO_URL_TTL_SECONDS`). Deleting a concept or
+replacing its video deletes the object from whichever provider holds it. R2
+charges nothing for egress, so playback traffic is free.
 
 **Test upload** on Admin → Video Storage performs the whole cycle from the
 server (presigned PUT, HEAD, presigned GET, delete) and prints the raw storage
 response, so any misconfiguration shows up there before a kid hits it.
+
+### Migrating from DreamObjects
+
+Each concept records which provider holds its video (`concepts.video_storage`,
+added by migration `002`), so R2 and DreamObjects can be configured at the same
+time: old videos keep playing from DreamObjects while new ones go to R2.
+
+1. Deploy, then apply migration `002_concept_video_storage.sql` (Admin →
+   Migrations or `bash www/db_migrations/migrate.sh`). It backfills every
+   existing video as held in `dreamobjects`.
+2. Keep the `DREAMOBJECTS_*` keys in `config.local.php` for now; add the R2
+   settings and set `VIDEO_STORAGE_PROVIDER = 'r2'` (steps 1–5 above).
+3. Copy the videos across. From a shell on the server (no request time limit;
+   each video streams through a temp file, so `/tmp` needs room for the
+   largest one):
+
+   ```
+   php deploy/migrate-videos.php --dry-run   # what would be copied
+   php deploy/migrate-videos.php             # copy, verify size, switch each concept over
+   ```
+
+   Every concept is switched to R2 only after its copy is confirmed with the
+   same size, and the run can be interrupted and repeated. For a handful of
+   small videos, **Migrate next video** on Admin → Video Storage does one per
+   click instead. (Bulk-copying the bucket with `rclone` first also works: the
+   script then finds each copy already present and only flips the rows.)
+4. Play a couple of migrated videos on the public site.
+5. The originals are still in DreamObjects and now show as *Orphans* on that
+   provider's card: **Delete orphans** removes them (or run the script with
+   `--delete-source` in step 3 to delete each original as it is verified).
+6. Once the DreamObjects card shows no videos recorded and no objects, delete
+   the `DREAMOBJECTS_*` lines from `config.local.php` and close the DreamObjects
+   account.
 
 ## 6. Smoke test after deploying
 

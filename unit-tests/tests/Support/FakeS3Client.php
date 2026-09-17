@@ -2,11 +2,13 @@
 declare(strict_types=1);
 
 /**
- * In-memory DreamObjects for tests: objects live in an array keyed by
+ * In-memory S3Client for tests: objects live in an array keyed by
  * "bucket\0key", and any attempt to reach the network fails the test.
- * Presigning is inherited unchanged (it is pure computation).
+ * Presigning is inherited unchanged (it is pure computation). One instance is
+ * injected per storage provider (see tests/bootstrap.php), each with its own
+ * endpoint so URLs reveal which provider they address.
  */
-final class FakeDreamObjects extends DreamObjects {
+final class FakeS3Client extends S3Client {
 
     /** @var array<string,array{size:int,content_type:string,body:string}> */
     public array $objects = [];
@@ -18,8 +20,8 @@ final class FakeDreamObjects extends DreamObjects {
     public array $calls = [];
     public bool $failDeletes = false;
 
-    public function __construct() {
-        parent::__construct('https://objects-test.dream.io', 'us-east-1', 'AKIATEST', 'secret-test');
+    public function __construct(string $endpoint = 'https://objects-test.dream.io', string $region = 'us-east-1') {
+        parent::__construct($endpoint, $region, 'AKIATEST', 'secret-test');
     }
 
     public function reset(): void {
@@ -104,6 +106,6 @@ final class FakeDreamObjects extends DreamObjects {
     }
 
     protected function send(string $method, string $url, array $headers, string $body): array {
-        throw new \LogicException("FakeDreamObjects must not reach the network (tried $method $url)");
+        throw new \LogicException("FakeS3Client must not reach the network (tried $method $url)");
     }
 }

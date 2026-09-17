@@ -15,10 +15,11 @@ require_once __DIR__ . '/../../www/lib/SiteResolver.php';
 require_once __DIR__ . '/../../www/lib/CategoryManagement.php';
 require_once __DIR__ . '/../../www/lib/SubcategoryManagement.php';
 require_once __DIR__ . '/../../www/lib/ConceptManagement.php';
-require_once __DIR__ . '/../../www/lib/DreamObjects.php';
+require_once __DIR__ . '/../../www/lib/S3Client.php';
 require_once __DIR__ . '/../../www/lib/VideoStorage.php';
+require_once __DIR__ . '/../../www/lib/VideoMigration.php';
 require_once __DIR__ . '/../../www/lib/MigrationRunner.php';
-require_once __DIR__ . '/Support/FakeDreamObjects.php';
+require_once __DIR__ . '/Support/FakeS3Client.php';
 
 const TEST_DB_NAME = 'mastery_brianrosenthal_test';
 
@@ -45,8 +46,10 @@ $testPdo->exec((string)file_get_contents(__DIR__ . '/../../www/schema.sql'));
 
 set_pdo_for_testing($testPdo);
 
-// Storage: never touch the network from tests.
-VideoStorage::storage(new FakeDreamObjects());
+// Storage: never touch the network from tests. One fake per provider, with
+// distinct endpoints so a URL shows which provider it addresses.
+VideoStorage::storage('r2', new FakeS3Client('https://r2-test.example', 'auto'));
+VideoStorage::storage('dreamobjects', new FakeS3Client('https://objects-test.dream.io', 'us-east-1'));
 
 // Helper for tests: wipe all domain tables back to a clean slate.
 function test_reset_all(): void {
@@ -60,7 +63,9 @@ function test_reset_all(): void {
         $pdo->exec('TRUNCATE TABLE ' . $table);
     }
     $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
-    VideoStorage::storage()->reset();
+    foreach (VideoStorage::providers() as $provider) {
+        VideoStorage::storage($provider)->reset();
+    }
 }
 
 // Helper for tests: seed a verified admin and return their UserContext.

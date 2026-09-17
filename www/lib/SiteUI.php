@@ -195,7 +195,7 @@ final class SiteUI {
             }
             return '<div class="video-missing">No video yet. <a href="/manage/concept_edit.php?id=' . (int)$concept['id'] . '#video">Record or upload one</a> from the editor.</div>';
         }
-        $src = VideoStorage::playbackUrlFor($key);
+        $src = VideoStorage::playbackUrlForConcept($concept);
         $type = (string)($concept['video_content_type'] ?? '');
         return '<div class="video-frame"><video controls playsinline preload="metadata" src="' . self::h($src) . '"'
              . ($type !== '' ? ' type="' . self::h($type) . '"' : '') . '>'
