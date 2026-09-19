@@ -2,6 +2,7 @@
 // Evaluates the site settings form (POST from manage/site_settings.php).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ManageUI.php';
+require_once __DIR__ . '/../lib/VideoStorage.php';
 Application::init();
 require_login();
 
@@ -36,6 +37,10 @@ try {
     SiteManagement::updateSiteContent($ctx, $siteId, $data);
     if ($ctx->admin && isset($_POST['slug'])) {
         SiteManagement::updateSiteRouting($ctx, $siteId, $routing['slug'], $routing['domain']);
+        $after = SiteManagement::findById($siteId);
+        if ($after['slug'] !== $site['slug'] || ($after['domain'] ?? '') !== ($site['domain'] ?? '')) {
+            VideoStorage::refreshCorsBestEffort($ctx);   // new hostname(s) must be allowed to upload
+        }
     }
     $next = validate_relative_next_path($_POST['next'] ?? '');
     if ($next !== '') {

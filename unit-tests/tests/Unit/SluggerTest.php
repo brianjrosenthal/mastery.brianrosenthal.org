@@ -42,6 +42,8 @@ final class SluggerTest extends TestCase
         $this->assertTrue(Slugger::isReserved('MANAGE'));
         $this->assertTrue(Slugger::isReserved('login'), 'login.php exists in the web root');
         $this->assertTrue(Slugger::isReserved('public_site'), 'public_site.php exists in the web root');
+        $this->assertTrue(Slugger::isReserved('www'), 'a site slug is also its subdomain');
+        $this->assertTrue(Slugger::isReserved('mail'));
         $this->assertFalse(Slugger::isReserved('styles'), 'styles.css does not shadow /styles/');
         $this->assertFalse(Slugger::isReserved('algebra-ii'));
     }

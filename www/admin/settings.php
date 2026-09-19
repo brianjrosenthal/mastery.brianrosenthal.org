@@ -8,7 +8,7 @@ require_admin();
 $msg = null;
 $err = null;
 
-// Settings definitions for the Mastery application
+// Settings definitions for the Kids That Teach application
 $SETTINGS_DEF = [
   'site_title' => [
     'label' => 'Site Title',
@@ -22,7 +22,7 @@ $SETTINGS_DEF = [
   ],
   'site_base_url' => [
     'label' => 'Site URL',
-    'hint'  => 'Used for links in emails, e.g. https://mastery.brianrosenthal.org',
+    'hint'  => 'Used for links in emails, e.g. https://kidsthatteach.org',
     'type'  => 'text',
   ],
 ];
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $current = [];
 foreach ($SETTINGS_DEF as $key => $_meta) {
   if ($key === 'site_title') {
-    $default = defined('APP_NAME') ? APP_NAME : 'Mastery';
+    $default = defined('APP_NAME') ? APP_NAME : 'Kids That Teach';
   } elseif ($key === 'timezone') {
     $default = date_default_timezone_get();
   } else {

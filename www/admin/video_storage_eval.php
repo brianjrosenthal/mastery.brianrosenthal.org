@@ -45,7 +45,7 @@ try {
             break;
 
         case 'apply_cors':
-            $origins = VideoStorage::corsOrigins(SiteResolver::mainHost(), SiteManagement::listDomains());
+            $origins = VideoStorage::wantedCorsOrigins();
             $client->putBucketCors($bucket, $origins);
             ActivityLog::log($ctx, 'video_storage.apply_cors', ['provider' => $provider, 'bucket' => $bucket, 'origins' => $origins]);
             $msg = 'CORS rule applied to ' . $label . ' for: ' . implode(', ', $origins);

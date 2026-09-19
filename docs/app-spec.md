@@ -1,11 +1,12 @@
-# Mastery — application spec (what the app does today)
+# Kids That Teach — application spec (what the app does today)
 
-Mastery is a PHP/MySQL site where Brian's kids publish "teach it back" content.
-Once they have learned something they record a short video explaining it, write
-a description and attach supporting links. One database powers the
-admin/authoring site (mastery.brianrosenthal.org) and a public, branded site per
-kid (mastery.charlierosenthal.org, mastery.lillyrosenthal.org). No framework, no
-build step. It follows the conventions in docs/php-guidelines.md throughout
+Kids That Teach (kidsthatteach.org, formerly "Mastery" at
+mastery.brianrosenthal.org) is a PHP/MySQL site where kids publish "teach it
+back" content. Once they have learned something they record a short video
+explaining it, write a description and attach supporting links. One database
+powers the admin/authoring site (kidsthatteach.org) and a public, branded site
+per kid, served automatically at {slug}.kidsthatteach.org and optionally at a
+custom domain (mastery.charlierosenthal.org). No framework, no build step. It follows the conventions in docs/php-guidelines.md throughout
 (PDO only, SQL only inside lib/* management classes, every write takes a
 UserContext and is activity-logged, `page.php` + `page_eval.php` pairing, CSRF
 on all POSTs, dedicated single-purpose AJAX endpoint files).
@@ -22,10 +23,18 @@ accent colour, public flag, a path slug and an optional custom domain.
 
 ## The public site (what a visitor sees)
 
-- Served at `/site/{slug}/…` on any host, or at `/…` on the site's custom
-  domain. `SiteResolver` decides from the `?site=` rewrite parameter or the
-  `Host` header. Pretty URLs are rewritten by `www/.htaccess`
-  (`deploy/dev-router.php` locally) to `public_site.php`.
+- Served at `/site/{slug}/…` on any host, at `/…` on the site's own subdomain
+  `{slug}.MAIN_HOST`, or at `/…` on the site's custom domain. `SiteResolver`
+  decides from the `?site=` rewrite parameter or the request hostname
+  (`request_host()` in `config.php`, which honours `X-Forwarded-Host` from the
+  subdomain Worker in `deploy/cloudflare-worker/` when its shared secret
+  matches `SUBDOMAIN_PROXY_KEY`). The canonical address is the custom domain,
+  else the subdomain. Former main hostnames (`LEGACY_HOSTS`) get a 301 to the
+  main host from `Application::init()`. Pretty URLs are rewritten by
+  `www/.htaccess` (`deploy/dev-router.php` locally) to `public_site.php`.
+- Sessions and the remember-me cookie carry `Domain=MAIN_HOST` on the main
+  host and its subdomains, so one login covers all of them; custom domains
+  keep host-only cookies and their own login.
 - **Home**: hero with title and tagline, the homepage Markdown, then a card per
   category (published-concept count, teaser). Header nav lists the categories.
 - **Category**: description, then one section per subcategory listing its
@@ -54,7 +63,10 @@ back to the public page so saving returns there.
   actions; "View site" and "Site settings". Admins get a user switcher
   (`?user_id=`) to manage anyone's site. A user without a site can create one.
 - **Site settings**: title, tagline, homepage Markdown (with Preview), colour
-  scheme (swatch picker), public toggle. Slug and custom domain are admin-only fields.
+  scheme (swatch picker), public toggle. Slug and custom domain are admin-only
+  fields; a custom domain under `MAIN_HOST` is refused since subdomains are
+  automatic. Slugs that would shadow the domain's own hostnames (`www`,
+  `mail`, …) are reserved (`Slugger::RESERVED`).
 - **Category / subcategory add & edit**: name, optional slug (generated from
   the name, de-duplicated, reserved names refused), Markdown description,
   order. Delete is offered only when empty.
@@ -81,8 +93,10 @@ back to the public page so saving returns there.
    provider held it, and returns the refreshed video panel as an HTML fragment.
 
 The secret key never leaves the server; a presigned URL authorizes exactly one
-key for 15 minutes. The bucket's CORS rule (applied from Admin → Video Storage)
-is limited to the site origins. Playback uses presigned GET URLs against the
+key for 15 minutes. The bucket's CORS rule (applied from Admin → Video Storage, and refreshed
+automatically when a site is created or its routing changes) is limited to
+the site origins: the main host, every site's subdomain and every custom
+domain (`SiteManagement::listPublicHosts()`). Playback uses presigned GET URLs against the
 provider that holds the video (`VideoStorage::playbackUrlForConcept`) whose
 timestamp is quantized to a 6-hour window (cacheable, byte-identical for every
 viewer in the window) with a 24-hour lifetime.
@@ -104,8 +118,8 @@ deleted as orphans.
 - **Users**: admin-created accounts only, with an activation email; a site is
   created automatically for each new user. Edit/delete users, resend
   activation, send password reset.
-- **Sites**: every site with its path and domain; links to its settings (where
-  slug/domain are set) and its content.
+- **Sites**: every site with its subdomain, path and custom domain; links to
+  its settings (where slug/domain are set) and its content.
 - **Settings**: site title, time zone, site URL (used in email links).
 - **Video Storage**: one card per provider (R2 active, DreamObjects previous):
   credentials check, create bucket, apply CORS for all site origins, test
@@ -153,8 +167,10 @@ deleted.
   (real `_test` database rebuilt from schema.sql; storage faked by
   `unit-tests/tests/Support/FakeS3Client.php`, one per provider). No endpoint or UI tests, per
   the guidelines.
-- Production: DreamHost VPS, one Apache vhost with `ServerAlias` for all
-  hostnames, Cloudflare R2 bucket with CORS. Full runbook in docs/deployment.md.
+- Production: DreamHost managed VPS with one shared web directory for every
+  hostname, Cloudflare DNS + a Worker for the `*.kidsthatteach.org`
+  subdomains (DreamHost cannot host a wildcard), Cloudflare R2 bucket with
+  CORS. Full runbook in docs/deployment.md.
 
 ## Original request (historical)
 

@@ -33,7 +33,7 @@ header_html($isMe ? 'My Site' : 'Manage ' . $target['first_name']);
       <input type="hidden" name="csrf" value="<?=h(csrf_token())?>">
       <input type="hidden" name="user_id" value="<?= $userId ?>">
       <label>Site title
-        <input type="text" name="title" value="<?=h($target['first_name'] . "'s Mastery")?>" required maxlength="150">
+        <input type="text" name="title" value="<?=h($target['first_name'] . ' Teaches')?>" required maxlength="150">
       </label>
       <div class="actions"><button type="submit" class="button primary">Create site</button></div>
     </form>
@@ -47,11 +47,13 @@ header_html($isMe ? 'My Site' : 'Manage ' . $target['first_name']);
     </div>
   </div>
   <p class="small">
-    <?php if (!empty($site['domain'])): ?>
-      Live at <a href="https://<?=h($site['domain'])?>/">https://<?=h($site['domain'])?>/</a>
-      · also at <a href="/site/<?=h($site['slug'])?>/">/site/<?=h($site['slug'])?>/</a>
-    <?php else: ?>
-      Address: <a href="/site/<?=h($site['slug'])?>/"><?=h(SiteResolver::canonicalHomeUrl($site))?></a>
+    <?php $canonical = SiteResolver::canonicalHomeUrl($site); $pathForm = '/site/' . $site['slug'] . '/'; ?>
+    Live at <a href="<?=h($canonical)?>"><?=h($canonical)?></a>
+    <?php if (!empty($site['domain']) && SiteResolver::subdomainHostFor($site) !== ''): ?>
+      · also at <a href="https://<?=h(SiteResolver::subdomainHostFor($site))?>/">https://<?=h(SiteResolver::subdomainHostFor($site))?>/</a>
+    <?php endif; ?>
+    <?php if (strpos($canonical, $pathForm) === false): ?>
+      · also at <a href="<?=h($pathForm)?>"><?=h($pathForm)?></a>
     <?php endif; ?>
     <?php if (empty($site['is_public'])): ?> · <span class="status-pending">Not public</span><?php endif; ?>
   </p>

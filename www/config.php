@@ -1,10 +1,57 @@
 <?php
-// Main configuration for the Mastery application (mastery.brianrosenthal.org)
+// Main configuration for the Kids That Teach application (kidsthatteach.org)
 require_once __DIR__ . '/config.local.php';
 require_once __DIR__ . '/lib/UserContext.php';
 
+// The hostname this request is really for. Subdomain sites
+// ({slug}.kidsthatteach.org) reach this server through a Cloudflare Worker
+// that fetches the main host and passes the visitor's hostname in
+// X-Forwarded-Host together with a shared secret (SUBDOMAIN_PROXY_KEY); the
+// header is trusted only when the secret matches. Lowercase, no port.
+function request_host(): string {
+    static $host = null;
+    if ($host !== null) {
+        return $host;
+    }
+    $raw = (string)($_SERVER['HTTP_HOST'] ?? '');
+    $key = defined('SUBDOMAIN_PROXY_KEY') ? (string)SUBDOMAIN_PROXY_KEY : '';
+    $forwarded = (string)($_SERVER['HTTP_X_FORWARDED_HOST'] ?? '');
+    if ($key !== '' && $forwarded !== '' && hash_equals($key, (string)($_SERVER['HTTP_X_SITE_PROXY_KEY'] ?? ''))) {
+        $raw = $forwarded;
+    }
+    $host = explode(':', strtolower(trim($raw)), 2)[0];
+    return $host;
+}
+
+// Cookie Domain attribute for this request: the main host (so a login on
+// kidsthatteach.org is shared with every {slug}.kidsthatteach.org) when the
+// request is on it or one of its subdomains, else '' (host-only cookie — a
+// custom domain like mastery.charlierosenthal.org must not be given a
+// Domain the browser would reject).
+function cookie_domain(): string {
+    $main = defined('MAIN_HOST') ? strtolower(trim((string)MAIN_HOST)) : '';
+    if ($main === '' || $main === 'localhost' || $main === '127.0.0.1') {
+        return '';
+    }
+    $h = request_host();
+    $suffix = '.' . $main;
+    $isSub = strlen($h) > strlen($suffix) && substr($h, -strlen($suffix)) === $suffix;
+    return ($h === $main || $isSub) ? $main : '';
+}
+
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
+    if (PHP_SAPI !== 'cli') {
+        $secure = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/',
+            'domain' => cookie_domain(),
+            'secure' => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
     session_start();
 }
 
@@ -117,7 +164,7 @@ function establish_login_session(array $user, bool $isSuper = false, bool $publi
         $rememberToken = create_remember_token((int)$user['id'], (string)$user['password_hash']);
         if ($rememberToken) {
             $expireTime = time() + (10 * 365 * 24 * 60 * 60); // 10 years
-            setcookie('remember_token', $rememberToken, $expireTime, '/', '', true, true);
+            setcookie('remember_token', $rememberToken, $expireTime, '/', cookie_domain(), true, true);
         }
     }
 }
@@ -150,7 +197,7 @@ function current_user(): ?array {
             }
         }
         // Invalid token, clear it
-        setcookie('remember_token', '', time() - 3600, '/', '', true, true);
+        setcookie('remember_token', '', time() - 3600, '/', cookie_domain(), true, true);
     }
 
     return null;

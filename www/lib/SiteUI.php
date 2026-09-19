@@ -241,7 +241,7 @@ final class SiteUI {
     /** A complete, styled "not found" page (also used for private sites). */
     public static function notFoundPage(?array $site, string $basePath, string $message): void {
         http_response_code(404);
-        $title = $site ? (string)$site['title'] : (defined('APP_NAME') ? APP_NAME : 'Mastery');
+        $title = $site ? (string)$site['title'] : (defined('APP_NAME') ? APP_NAME : 'Kids That Teach');
         echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>Not found · ' . self::h($title) . '</title>';
         echo ApplicationUI::cssLink('/site.css');

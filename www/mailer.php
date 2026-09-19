@@ -22,7 +22,7 @@ function send_email_with_error(string $toEmail, string $subject, string $html, s
   $pass = SMTP_PASS;
   $secure = defined('SMTP_SECURE') ? strtolower(SMTP_SECURE) : 'tls';
   $fromEmail = defined('SMTP_FROM_EMAIL') && SMTP_FROM_EMAIL ? SMTP_FROM_EMAIL : SMTP_USER;
-  $fromName  = defined('SMTP_FROM_NAME') ? SMTP_FROM_NAME : 'Mastery';
+  $fromName  = defined('SMTP_FROM_NAME') ? SMTP_FROM_NAME : 'Kids That Teach';
 
   $timeout = 20;
   $transport = ($secure === 'ssl') ? "ssl://$host" : $host;

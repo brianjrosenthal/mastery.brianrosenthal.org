@@ -11,13 +11,18 @@ final class Slugger {
     /**
      * Slugs that would collide with real paths on the main host (a category
      * called "admin" would shadow /admin/) or read as system paths on a custom
-     * domain. Checked case-insensitively; isReserved() also refuses anything
-     * that exists as a file or directory in the web root.
+     * domain, plus hostnames that must not become a site's subdomain (a site
+     * slug is also served at {slug}.kidsthatteach.org, so "www" or "mail"
+     * would shadow the domain's own records). Checked case-insensitively;
+     * isReserved() also refuses anything that exists as a file or directory
+     * in the web root.
      */
     public const RESERVED = [
         'admin', 'manage', 'profile', 'site', 'logs', 'db_migrations', 'lib',
         'assets', 'login', 'logout', 'index', 'public_site', 'api', 'static',
         'cgi-bin', 'stats', 'failed_auth',
+        'www', 'mail', 'smtp', 'imap', 'pop', 'pop3', 'ftp', 'webmail', 'ns1', 'ns2',
+        'mysql', 'autoconfig', 'autodiscover', 'cdn', 'app', 'dev', 'test',
     ];
 
     public const MAX_LENGTH = 80;

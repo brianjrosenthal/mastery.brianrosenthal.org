@@ -138,9 +138,10 @@ final class VideoStorageTest extends TestCase
 
     public function testCorsOriginsCoverMainHostDomainsAndLocalDev(): void
     {
-        $origins = VideoStorage::corsOrigins('mastery.brianrosenthal.org', ['mastery.charlierosenthal.org', 'MASTERY.lillyrosenthal.org', '', 'mastery.charlierosenthal.org']);
+        $origins = VideoStorage::corsOrigins('kidsthatteach.org', ['charlie.kidsthatteach.org', 'mastery.charlierosenthal.org', 'MASTERY.lillyrosenthal.org', '', 'mastery.charlierosenthal.org']);
         $this->assertSame([
-            'https://mastery.brianrosenthal.org',
+            'https://kidsthatteach.org',
+            'https://charlie.kidsthatteach.org',
             'https://mastery.charlierosenthal.org',
             'https://mastery.lillyrosenthal.org',
             'http://localhost:8080',

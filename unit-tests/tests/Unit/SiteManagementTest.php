@@ -104,9 +104,11 @@ final class SiteManagementTest extends TestCase
 
         foreach ([
             ['admin', ''],                                   // reserved slug
+            ['www', ''],                                     // would shadow www.MAIN_HOST
             ['lilly', ''],                                   // taken slug
             ['charlie', 'mastery.lillyrosenthal.org'],       // taken domain
             ['charlie', MAIN_HOST],                          // the main host
+            ['charlie', 'charlie.' . MAIN_HOST],             // subdomains are automatic, not custom domains
             ['charlie', 'not a host'],                       // malformed
         ] as [$slug, $domain]) {
             try {
@@ -116,6 +118,20 @@ final class SiteManagementTest extends TestCase
                 $this->assertNotSame('', $e->getMessage());
             }
         }
+    }
+
+    public function testListPublicHostsCoversSubdomainsAndCustomDomains(): void
+    {
+        $id = SiteManagement::createForUser($this->admin, $this->charlie->id, 'Charlie', 'A');
+        $lilly = test_seed_user('lilly@example.com', 'Lilly');
+        SiteManagement::createForUser($this->admin, $lilly->id, 'Lilly', 'B');
+        SiteManagement::updateSiteRouting($this->admin, $id, 'charlie', 'mastery.charlierosenthal.org');
+
+        $expected = ['mastery.charlierosenthal.org'];
+        if (SiteResolver::subdomainHostFor(['slug' => 'x']) !== '') {
+            $expected = ['charlie.' . strtolower(MAIN_HOST), 'mastery.charlierosenthal.org', 'lilly.' . strtolower(MAIN_HOST)];
+        }
+        $this->assertSame($expected, SiteManagement::listPublicHosts());
     }
 
     public function testContentValidation(): void

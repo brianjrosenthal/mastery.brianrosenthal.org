@@ -321,7 +321,9 @@ final class VideoStorage {
 
     /**
      * Origins the bucket's CORS rule must allow so browsers on every site can
-     * PUT uploads: the main host, each custom domain, and local development.
+     * PUT uploads: the main host, each site's own hostname (subdomain and
+     * custom domain, see SiteManagement::listPublicHosts()), and local
+     * development.
      * @param string[] $domains
      * @return string[]
      */
@@ -338,6 +340,34 @@ final class VideoStorage {
             $origins[] = 'http://localhost:8080';
         }
         return array_values(array_unique($origins));
+    }
+
+    /** The origins the active bucket's CORS rule should allow right now. */
+    public static function wantedCorsOrigins(): array {
+        require_once __DIR__ . '/SiteResolver.php';
+        require_once __DIR__ . '/SiteManagement.php';
+        return self::corsOrigins(SiteResolver::mainHost(), SiteManagement::listPublicHosts());
+    }
+
+    /**
+     * Re-apply the CORS rule to the active bucket after a site gained a new
+     * hostname (created, or its slug/domain changed), so uploads from that
+     * origin work without an admin visiting Video Storage. Best effort: a
+     * missing configuration or a storage error is swallowed (the admin page
+     * shows the rule as missing and offers to apply it).
+     */
+    public static function refreshCorsBestEffort(?UserContext $ctx): void {
+        if (!self::isConfigured()) {
+            return;
+        }
+        try {
+            $origins = self::wantedCorsOrigins();
+            self::storage()->putBucketCors(self::bucket(), $origins);
+            require_once __DIR__ . '/ActivityLog.php';
+            ActivityLog::log($ctx, 'video_storage.apply_cors', ['provider' => self::activeProvider(), 'bucket' => self::bucket(), 'origins' => $origins, 'automatic' => true]);
+        } catch (\Throwable $e) {
+            error_log('CORS refresh failed: ' . $e->getMessage());
+        }
     }
 
     /**

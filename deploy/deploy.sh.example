@@ -4,7 +4,7 @@
 #   bash deploy/deploy.sh
 set -euo pipefail
 
-REMOTE="lillytech@vps47444.dreamhostps.com"
+REMOTE="brosenthvps@vps47444.dreamhostps.com"
 REMOTE_DIR="~/mastery.brianrosenthal.org"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)/www"
 

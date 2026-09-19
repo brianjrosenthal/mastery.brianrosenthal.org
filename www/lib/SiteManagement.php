@@ -101,6 +101,28 @@ final class SiteManagement {
         return array_map(static fn(array $r): string => (string)$r['domain'], $rows);
     }
 
+    /**
+     * Every hostname a site is served on: each site's {slug}.MAIN_HOST
+     * subdomain (when a real main host is configured) plus every custom
+     * domain. The storage CORS rule must allow all of them, since a kid
+     * editing on their own hostname uploads from that origin.
+     * @return string[]
+     */
+    public static function listPublicHosts(): array {
+        require_once __DIR__ . '/SiteResolver.php';
+        $hosts = [];
+        foreach (self::pdo()->query('SELECT slug, domain FROM sites ORDER BY slug')->fetchAll() as $row) {
+            $sub = SiteResolver::subdomainHostFor($row);
+            if ($sub !== '') {
+                $hosts[] = $sub;
+            }
+            if (!empty($row['domain'])) {
+                $hosts[] = (string)$row['domain'];
+            }
+        }
+        return array_values(array_unique($hosts));
+    }
+
     public static function slugExists(string $slug): bool {
         $st = self::pdo()->prepare('SELECT COUNT(*) FROM sites WHERE slug = ?');
         $st->execute([$slug]);
@@ -206,11 +228,14 @@ final class SiteManagement {
         if (trim($domain) !== '') {
             $domainNorm = self::normalizeDomain($domain);
             if ($domainNorm === null) {
-                throw new InvalidArgumentException('Domain must be a bare hostname like mastery.charlierosenthal.org.');
+                throw new InvalidArgumentException('Domain must be a bare hostname like mastery.NAME.org.');
             }
-            $mainHost = defined('MAIN_HOST') ? strtolower(MAIN_HOST) : '';
+            $mainHost = defined('MAIN_HOST') ? strtolower(trim((string)MAIN_HOST)) : '';
             if ($domainNorm === $mainHost) {
                 throw new InvalidArgumentException('That is the main site\'s hostname; a user site needs its own.');
+            }
+            if ($mainHost !== '' && substr($domainNorm, -strlen('.' . $mainHost)) === '.' . $mainHost) {
+                throw new InvalidArgumentException('Subdomains of ' . $mainHost . ' are automatic: the site is already at ' . $slug . '.' . $mainHost . '. Use a custom domain only for a different domain name.');
             }
             $other = self::findByDomain($domainNorm);
             if ($other && (int)$other['id'] !== $siteId) {

@@ -1,5 +1,5 @@
 <?php
-// Local configuration for the Mastery app (do not commit the real config.local.php)
+// Local configuration for the Kids That Teach app (do not commit the real config.local.php)
 //
 // Copy this file to config.local.php and fill in your environment-specific values.
 
@@ -9,11 +9,25 @@ define('DB_USER', '');
 define('DB_PASS', '');
 
 // Application branding (used as a fallback; UI will prefer Settings::get('site_title', APP_NAME))
-define('APP_NAME', 'Mastery');
+define('APP_NAME', 'Kids That Teach');
 
-// Hostname of the main (admin) site. Requests on any other hostname are
-// treated as a user's public site (matched against sites.domain).
-define('MAIN_HOST', 'mastery.brianrosenthal.org');
+// Hostname of the main (admin) site. Every user's site is served at
+// {slug}.MAIN_HOST automatically and at /site/{slug}/ on the main host;
+// requests on any other hostname are matched against sites.domain (a custom
+// domain such as mastery.charlierosenthal.org).
+define('MAIN_HOST', 'kidsthatteach.org');
+
+// Former main hostnames. A request on one of these is redirected (301) to the
+// same path on MAIN_HOST, so old links keep working. Empty array = none.
+define('LEGACY_HOSTS', ['mastery.brianrosenthal.org']);
+
+// Subdomain sites reach this server through a Cloudflare Worker
+// (deploy/cloudflare-worker/) that fetches https://MAIN_HOST and passes the
+// visitor's hostname in an X-Forwarded-Host header. That header is trusted
+// only when the request also carries X-Site-Proxy-Key equal to this value.
+// Set the same value as the Worker's PROXY_KEY secret; leave '' to ignore the
+// header entirely (subdomains then need a custom-domain entry each).
+define('SUBDOMAIN_PROXY_KEY', '');
 
 // A password that signs in as any user — for testing only. Leave empty ('')
 // to disable, and disable it in production once testing is done.
@@ -26,7 +40,7 @@ define('SMTP_USER', '');               // your Gmail address
 define('SMTP_PASS', '');               // app password (recommended)
 define('SMTP_SECURE', 'tls');          // 'tls' or 'ssl'
 define('SMTP_FROM_EMAIL', '');         // often the same as SMTP_USER
-define('SMTP_FROM_NAME', 'Mastery');   // From name seen in emails
+define('SMTP_FROM_NAME', 'Kids That Teach');   // From name seen in emails
 
 // HMAC key for remember me tokens (REQUIRED for persistent login).
 // Set to a long random string, e.g., bin2hex(random_bytes(32)).

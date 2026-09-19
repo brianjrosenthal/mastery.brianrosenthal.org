@@ -18,7 +18,7 @@ $msg = $_GET['msg'] ?? null;
 $err = $_GET['err'] ?? null;
 
 $active = VideoStorage::activeProvider();
-$wantedOrigins = VideoStorage::corsOrigins(SiteResolver::mainHost(), SiteManagement::listDomains());
+$wantedOrigins = VideoStorage::wantedCorsOrigins();
 $counts = VideoMigration::countsByProvider();
 $pending = VideoMigration::pending($active);
 $pendingBytes = array_sum(array_column($pending, 'video_size_bytes'));
@@ -164,5 +164,5 @@ php deploy/migrate-videos.php --delete-source   # also delete each original once
     </table>
   <?php endif; ?>
 </div>
-<p class="small">Origins the CORS rule allows: <?php foreach ($wantedOrigins as $o): ?><code><?=h($o)?></code> <?php endforeach; ?> (the main host, every site's custom domain, and localhost for development). Re-apply after adding a domain. <strong>Test upload</strong> performs a presigned PUT from this server exactly as a browser would and shows the raw response, so an upload failure can be diagnosed here.</p>
+<p class="small">Origins the CORS rule allows: <?php foreach ($wantedOrigins as $o): ?><code><?=h($o)?></code> <?php endforeach; ?> (the main host, every site's subdomain and custom domain, and localhost for development). The rule is re-applied automatically when a site is created or its routing changes; re-apply here if that failed. <strong>Test upload</strong> performs a presigned PUT from this server exactly as a browser would and shows the raw response, so an upload failure can be diagnosed here.</p>
 <?php footer_html(); ?>

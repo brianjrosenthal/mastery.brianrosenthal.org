@@ -3,16 +3,23 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/SiteManagement.php';
+require_once __DIR__ . '/Slugger.php';
 
 /**
  * Decides which user's public site a request is for, and builds that site's
- * public URLs. Two ways in:
+ * public URLs. Three ways in:
  *
- *   - path form  : mastery.brianrosenthal.org/site/{slug}/...   (any host)
- *   - custom host: mastery.charlierosenthal.org/...             (sites.domain)
+ *   - path form  : kidsthatteach.org/site/{slug}/...        (any host)
+ *   - subdomain  : {slug}.kidsthatteach.org/...              (derived from sites.slug)
+ *   - custom host: mastery.charlierosenthal.org/...          (sites.domain)
  *
  * The result is a "resolved site" array used by every public page:
  *   ['site' => row|null, 'base_path' => '' | '/site/{slug}', 'is_custom_domain' => bool]
+ * where is_custom_domain means "this site is served at / on the request's
+ * hostname" (its subdomain or its custom domain).
+ *
+ * The request's hostname comes from request_host() (config.php), which honours
+ * the X-Forwarded-Host set by the subdomain Worker when its secret matches.
  *
  * resolve() takes the lookups as callables so the routing rules are unit
  * testable without a database.
@@ -20,7 +27,12 @@ require_once __DIR__ . '/SiteManagement.php';
 final class SiteResolver {
 
     public static function mainHost(): string {
-        return defined('MAIN_HOST') ? strtolower((string)MAIN_HOST) : '';
+        return defined('MAIN_HOST') ? strtolower(trim((string)MAIN_HOST)) : '';
+    }
+
+    /** True when subdomain routing applies: a real main host is configured. */
+    private static function mainHostSupportsSubdomains(string $mainHost): bool {
+        return $mainHost !== '' && $mainHost !== 'localhost' && $mainHost !== '127.0.0.1';
     }
 
     /** "Mastery.CharlieRosenthal.org:8080" -> "mastery.charlierosenthal.org" */
@@ -30,12 +42,45 @@ final class SiteResolver {
     }
 
     /**
+     * The slug a hostname of the form {slug}.{mainHost} names, or null when the
+     * host is anything else (the main host itself, www., a deeper label, an
+     * unrelated domain, or a label that is not a valid slug).
+     */
+    public static function subdomainSlug(string $host, string $mainHost): ?string {
+        $h = self::normalizeHost($host);
+        $main = strtolower(trim($mainHost));
+        if (!self::mainHostSupportsSubdomains($main)) {
+            return null;
+        }
+        $suffix = '.' . $main;
+        if (strlen($h) <= strlen($suffix) || substr($h, -strlen($suffix)) !== $suffix) {
+            return null;
+        }
+        $label = substr($h, 0, -strlen($suffix));
+        if ($label === 'www' || strpos($label, '.') !== false || !Slugger::isValid($label)) {
+            return null;
+        }
+        return $label;
+    }
+
+    /** "{slug}.{mainHost}" for a site row, or '' when subdomains do not apply. */
+    public static function subdomainHostFor(array $site, ?string $mainHost = null): string {
+        $main = $mainHost ?? self::mainHost();
+        if (!self::mainHostSupportsSubdomains($main)) {
+            return '';
+        }
+        return strtolower((string)$site['slug']) . '.' . $main;
+    }
+
+    /**
      * @param callable(string):?array $findBySlug
      * @param callable(string):?array $findByDomain
+     * @param ?string $mainHost defaults to MAIN_HOST; tests pass it explicitly
      * @return array{site:?array,base_path:string,is_custom_domain:bool}
      */
-    public static function resolve(string $host, string $slugFromPath, callable $findBySlug, callable $findByDomain): array {
+    public static function resolve(string $host, string $slugFromPath, callable $findBySlug, callable $findByDomain, ?string $mainHost = null): array {
         $none = ['site' => null, 'base_path' => '', 'is_custom_domain' => false];
+        $main = strtolower(trim($mainHost ?? self::mainHost()));
 
         $slug = strtolower(trim($slugFromPath));
         if ($slug !== '') {
@@ -47,9 +92,17 @@ final class SiteResolver {
         }
 
         $h = self::normalizeHost($host);
-        if ($h === '' || $h === self::mainHost() || $h === 'www.' . self::mainHost()) {
+        if ($h === '' || $h === $main || $h === 'www.' . $main) {
             return $none;
         }
+
+        // {slug}.kidsthatteach.org: derived from the slug, nothing to configure.
+        $subSlug = self::subdomainSlug($h, $main);
+        if ($subSlug !== null) {
+            $site = $findBySlug($subSlug);
+            return $site === null ? $none : ['site' => $site, 'base_path' => '', 'is_custom_domain' => true];
+        }
+
         // DreamHost's "Add WWW" option can serve the site as www.<domain>;
         // treat that as the same site.
         $site = $findByDomain($h);
@@ -62,14 +115,14 @@ final class SiteResolver {
         return ['site' => $site, 'base_path' => '', 'is_custom_domain' => true];
     }
 
-    /** Resolve from the live request: ?site= (set by the rewrite) or the Host header. */
+    /** Resolve from the live request: ?site= (set by the rewrite) or the hostname. */
     public static function resolveFromRequest(): array {
         static $cached = null;
         if ($cached !== null) {
             return $cached;
         }
         $cached = self::resolve(
-            (string)($_SERVER['HTTP_HOST'] ?? ''),
+            request_host(),
             (string)($_GET['site'] ?? ''),
             [SiteManagement::class, 'findBySlug'],
             [SiteManagement::class, 'findByDomain']
@@ -77,23 +130,27 @@ final class SiteResolver {
         return $cached;
     }
 
-    /** True when the current request's host is the site's own domain. */
+    /** True when the current request's host is the site's own subdomain or custom domain. */
     public static function requestIsOnDomainOf(array $site): bool {
+        $h = request_host();
+        $sub = self::subdomainHostFor($site);
+        if ($sub !== '' && $h === $sub) {
+            return true;
+        }
         $domain = (string)($site['domain'] ?? '');
-        $h = self::normalizeHost((string)($_SERVER['HTTP_HOST'] ?? ''));
         return $domain !== '' && ($h === $domain || $h === 'www.' . $domain);
     }
 
     /** True when the request's hostname is the main (admin) site or unknown. */
     public static function requestIsOnMainHost(): bool {
-        $h = self::normalizeHost((string)($_SERVER['HTTP_HOST'] ?? ''));
+        $h = request_host();
         $main = self::mainHost();
         return $main === '' || $h === $main || $h === 'www.' . $main || $h === 'localhost' || $h === '127.0.0.1';
     }
 
     /**
      * Base path for a site as seen from the current request: '' when we are on
-     * its custom domain, else the /site/{slug} path form (which works on every
+     * its own hostname, else the /site/{slug} path form (which works on every
      * host, including localhost).
      */
     public static function basePathFor(array $site): string {
@@ -105,14 +162,45 @@ final class SiteResolver {
         return self::basePathFor($site) . '/';
     }
 
-    /** The site's canonical absolute homepage (custom domain when set). */
+    /**
+     * The site's canonical absolute homepage: its custom domain when set, else
+     * its subdomain, else (no usable main host, e.g. local development) the
+     * path form on the main site.
+     */
     public static function canonicalHomeUrl(array $site): string {
         $domain = (string)($site['domain'] ?? '');
         if ($domain !== '') {
             return 'https://' . $domain . '/';
         }
+        $sub = self::subdomainHostFor($site);
+        if ($sub !== '') {
+            return 'https://' . $sub . '/';
+        }
         require_once __DIR__ . '/../settings.php';
         return Settings::siteBaseUrl() . '/site/' . $site['slug'] . '/';
+    }
+
+    /**
+     * Where a request on a former main hostname (LEGACY_HOSTS) should be sent:
+     * the same path and query on the current main host. Null when the host is
+     * not a legacy one (or nothing is configured), so the request proceeds.
+     *
+     * @param string[] $legacyHosts
+     */
+    public static function legacyRedirectTarget(string $host, string $uri, array $legacyHosts, string $mainHost): ?string {
+        $h = self::normalizeHost($host);
+        $main = strtolower(trim($mainHost));
+        if ($h === '' || $main === '' || $h === $main) {
+            return null;
+        }
+        foreach ($legacyHosts as $legacy) {
+            $l = self::normalizeHost((string)$legacy);
+            if ($l !== '' && ($h === $l || $h === 'www.' . $l)) {
+                $path = $uri === '' || $uri[0] !== '/' ? '/' . $uri : $uri;
+                return 'https://' . $main . $path;
+            }
+        }
+        return null;
     }
 
     /**

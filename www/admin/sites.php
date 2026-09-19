@@ -18,19 +18,20 @@ header_html('Sites');
 </div>
 <?php if ($msg): ?><p class="flash"><?=h($msg)?></p><?php endif; ?>
 <?php if ($err): ?><p class="error"><?=h($err)?></p><?php endif; ?>
-<p class="small">A site is created automatically when a user is added. Set a custom domain here (Site settings → Routing), then add the hostname to the Apache vhost and DNS as described in docs/deployment.md.</p>
+<p class="small">A site is created automatically when a user is added and is live at its subdomain right away. A custom domain is optional: set it under Site settings → Routing, then add the hostname in the DreamHost panel as described in docs/deployment.md.</p>
 
 <?php if (empty($sites)): ?>
   <p class="small">No sites yet.</p>
 <?php else: ?>
   <div class="card"><div class="table-scroll">
     <table class="list">
-      <thead><tr><th>Owner</th><th>Title</th><th>Path</th><th>Custom domain</th><th>Public</th><th></th></tr></thead>
+      <thead><tr><th>Owner</th><th>Title</th><th>Subdomain</th><th>Path</th><th>Custom domain</th><th>Public</th><th></th></tr></thead>
       <tbody>
         <?php foreach ($sites as $s): ?>
           <tr>
             <td><?=h(trim($s['first_name'] . ' ' . $s['last_name']))?><br><span class="small"><?=h($s['email'])?></span></td>
             <td><?=h($s['title'])?></td>
+            <td><?php $sub = SiteResolver::subdomainHostFor($s); ?><?php if ($sub !== ''): ?><a href="https://<?=h($sub)?>/"><?=h($sub)?></a><?php else: ?><span class="muted">—</span><?php endif; ?></td>
             <td><a href="/site/<?=h($s['slug'])?>/">/site/<?=h($s['slug'])?>/</a></td>
             <td><?php if (!empty($s['domain'])): ?><a href="https://<?=h($s['domain'])?>/"><?=h($s['domain'])?></a><?php else: ?><span class="muted">—</span><?php endif; ?></td>
             <td><?= !empty($s['is_public']) ? '<span class="status-verified">Yes</span>' : '<span class="status-pending">No</span>' ?></td>

@@ -1,5 +1,5 @@
 <?php
-// Settings management for the Mastery application
+// Settings management for the Kids That Teach application
 require_once __DIR__ . '/config.php';
 
 class Settings {

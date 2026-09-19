@@ -17,7 +17,7 @@ session_destroy();
 
 // Clear remember me cookie
 if (isset($_COOKIE['remember_token'])) {
-    setcookie('remember_token', '', time() - 3600, '/', '', true, true);
+    setcookie('remember_token', '', time() - 3600, '/', cookie_domain(), true, true);
 }
 
 // Redirect to login

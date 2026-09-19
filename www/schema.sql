@@ -1,4 +1,4 @@
--- Mastery (mastery.brianrosenthal.org) application schema
+-- Kids That Teach (kidsthatteach.org) application schema
 -- Create the database, then load this file. This file always represents the
 -- complete current schema; migrations in db_migrations/ exist only to upgrade
 -- older production installations.
@@ -35,9 +35,9 @@ CREATE TABLE settings (
 ) ENGINE=InnoDB;
 
 INSERT INTO settings (key_name, value) VALUES
-  ('site_title', 'Mastery'),
+  ('site_title', 'Kids That Teach'),
   ('timezone', 'America/New_York'),
-  ('site_base_url', 'https://mastery.brianrosenthal.org')
+  ('site_base_url', 'https://kidsthatteach.org')
 ON DUPLICATE KEY UPDATE value=VALUES(value);
 
 -- ===== Activity Log =====
@@ -86,13 +86,14 @@ CREATE TABLE schema_migrations (
 
 INSERT IGNORE INTO schema_migrations (filename) VALUES
   ('001_initial_schema.sql'),
-  ('002_concept_video_storage.sql');
+  ('002_concept_video_storage.sql'),
+  ('003_rebrand_kidsthatteach.sql');
 
 -- ===== Sites =====
 -- One public site per user: its branding and homepage, the slug that serves
--- it at /site/{slug}/ on the main host, and the optional custom domain
--- (e.g. mastery.charlierosenthal.org) that serves it at /. Admins set slug and
--- domain; the owner edits everything else.
+-- it at {slug}.kidsthatteach.org and at /site/{slug}/ on the main host, and
+-- the optional custom domain (e.g. mastery.charlierosenthal.org) that serves
+-- it at /. Admins set slug and domain; the owner edits everything else.
 CREATE TABLE sites (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL UNIQUE,

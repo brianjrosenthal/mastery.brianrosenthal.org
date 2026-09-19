@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/UserManagement.php';
 require_once __DIR__ . '/../lib/SiteManagement.php';
+require_once __DIR__ . '/../lib/VideoStorage.php';
 Application::init();
 require_admin();
 
@@ -63,7 +64,8 @@ try {
     // before they can start publishing. Admins pick the domain later.
     $siteNote = '';
     try {
-        SiteManagement::createForUser($ctx, $userId, $first_name, $first_name . "'s Mastery");
+        SiteManagement::createForUser($ctx, $userId, $first_name, $first_name . ' Teaches');
+        VideoStorage::refreshCorsBestEffort($ctx);   // the new {slug} subdomain must be allowed to upload
     } catch (Throwable $e) {
         $siteNote = ' (Their site could not be created: ' . $e->getMessage() . ' — they can create it from Manage.)';
     }

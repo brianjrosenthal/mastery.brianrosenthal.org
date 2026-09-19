@@ -1,54 +1,78 @@
-# Deploying Mastery on the DreamHost VPS
+# Deploying Kids That Teach on the DreamHost VPS
 
-Three hostnames, one directory, one database, on a panel-managed DreamHost
-VPS (no root; everything is done from the DreamHost panel and a shell as the
-site user):
+One directory, one database, on a panel-managed DreamHost VPS (no root;
+everything is done from the DreamHost panel and a shell as the site user),
+with Cloudflare in front of `kidsthatteach.org` for the wildcard subdomains.
 
-| Hostname | What it shows |
-|---|---|
-| `mastery.brianrosenthal.org` | Login, the authoring area (`/manage/`), admin. Also every user's site at `/site/{slug}/`. |
-| `mastery.charlierosenthal.org` | Charlie's public site at `/` (and `/login.php`, `/manage/` still work here). |
-| `mastery.lillyrosenthal.org` | Lilly's public site at `/`. |
+| Hostname | What it shows | Who serves it |
+|---|---|---|
+| `kidsthatteach.org` | Login, the authoring area (`/manage/`), admin. Also every user's site at `/site/{slug}/`. | DreamHost (DNS-only record, Let's Encrypt from the panel) |
+| `{slug}.kidsthatteach.org` | That user's public site at `/` (and `/login.php`, `/manage/` work here too). Automatic for every site. | Cloudflare Worker → DreamHost (`deploy/cloudflare-worker/`) |
+| `mastery.charlierosenthal.org` (a custom domain) | That user's public site at `/`. Optional, one panel entry per domain. | DreamHost |
+| `mastery.brianrosenthal.org` (former main host) | 301 redirect to the same path on `kidsthatteach.org`. | DreamHost |
 
-PHP decides which site to render from the `Host` header (`www/lib/SiteResolver.php`),
-so all three hostnames must simply reach the same document root.
+PHP decides which site to render from the hostname (`www/lib/SiteResolver.php`,
+using `request_host()` in `www/config.php`), so every hostname must simply
+reach the same document root. The subdomains are the one exception: DreamHost's
+managed hosting cannot host a wildcard domain (wildcard DNS is a support
+ticket and wildcard certificates are unsupported), so Cloudflare answers for
+`*.kidsthatteach.org` and a Worker forwards each request to the main host with
+the visitor's hostname in `X-Forwarded-Host` plus a shared secret.
 
-## Can DreamHost route several domains to one directory?
+## 1. Cloudflare (Free plan)
 
-Yes. Which way depends on whether you have root on the box.
+The account that already holds the R2 bucket.
 
-### Panel-managed hosting (shared, or a VPS without sudo) — what we use
+1. *Add a domain* → `kidsthatteach.org`, Free plan. Change the nameservers at
+   the registrar to the two Cloudflare gives you (already done if the domain
+   was registered with Cloudflare).
+2. **DNS**:
+   - `A  kidsthatteach.org → <VPS IP>` — **DNS only** (grey cloud) so
+     DreamHost's Let's Encrypt keeps issuing the apex certificate.
+   - `A  * → <VPS IP>` — **Proxied** (orange cloud). This is what makes every
+     subdomain resolve and get HTTPS.
+   - optional `A  www → <VPS IP>`, proxied; the Worker redirects it to the apex.
+3. **SSL/TLS → Overview**: encryption mode **Full (strict)**. Universal SSL
+   (on by default) covers `kidsthatteach.org` and `*.kidsthatteach.org`.
+4. **Worker**: follow `deploy/cloudflare-worker/README.md` — paste
+   `worker.js`, set the `ORIGIN_HOST` variable and `PROXY_KEY` secret, add the
+   route `*.kidsthatteach.org/*`.
+
+Custom kid domains (`mastery.charlierosenthal.org`) do not go through
+Cloudflare at all: their DNS points straight at the VPS as before.
+
+## 2. DreamHost panel
 
 Each domain in the panel has its own *Web directory*; several domains may
-point at the same one. Do NOT symlink `~/mastery.charlierosenthal.org` to the
-main directory: Apache and Let's Encrypt are configured from the panel's
-directory setting, so change that setting instead.
+point at the same one. Do NOT symlink a second domain's directory to the main
+one: Apache and Let's Encrypt are configured from the panel's directory
+setting, so change that setting instead.
 
-1. *Websites → Manage Websites → Add Website* for `mastery.charlierosenthal.org`.
-   Choose **Fully hosted** (a *Mirror* domain cannot get HTTPS).
-2. Set **Web directory** to `/home/USER/mastery.brianrosenthal.org` (the
-   directory holding the contents of the repo's `www/`). Same PHP version as
-   the main site.
-3. Enable **Let's Encrypt** and the HTTPS-only redirect.
-4. If the domain's DNS is not at DreamHost, add the `A` record the panel shows.
+1. *Websites → Manage Websites → Add Website* for `kidsthatteach.org`.
+   Choose **Fully hosted** (a *Mirror* domain cannot get HTTPS). Set **Web
+   directory** to `/home/brosenthvps/mastery.brianrosenthal.org` (the directory
+   holding the contents of the repo's `www/`; its name on disk does not
+   matter and is left as it was). Same PHP version as before. Enable **Let's
+   Encrypt** and the HTTPS-only redirect. Leave *Add WWW* off (www is handled
+   by Cloudflare and the Worker).
+2. Keep the existing `mastery.brianrosenthal.org` entry: the app redirects it.
+3. For each custom kid domain (`mastery.charlierosenthal.org`), the same
+   steps: fully hosted, shared web directory, Let's Encrypt. If the domain's
+   DNS is not at DreamHost, add the `A` record the panel shows.
 
 Nothing on disk changes: one copy of the files, one `config.local.php`, one
 `.htaccess`. The app tells the sites apart by hostname.
 
-### Self-managed VPS (root access)
+### Self-managed VPS (root access) instead
 
 Apache does it with `ServerAlias`: one `<VirtualHost>` lists all the names
-and one `DocumentRoot`. See `deploy/apache-vhost.conf.example` and section 4b.
+and one `DocumentRoot`. See `deploy/apache-vhost.conf.example`. The Worker
+setup is the same; a self-managed box could alternatively terminate the
+wildcard itself with certbot's DNS challenge, which the panel cannot do.
 
-## 1. DNS
+## 3. Files on the server
 
-For each hostname create an `A` record pointing at the server IP (and `AAAA`
-if it has IPv6). With panel-managed hosting DreamHost adds this for you when
-the domain's DNS is hosted there.
-
-## 2. Files on the server
-
-Following the hackleyclubz layout, everything runs as one Linux user:
+Everything runs as one Linux user:
 
 ```
 ~/mastery.brianrosenthal.org/        # DocumentRoot = a copy of the repo's www/
@@ -59,17 +83,24 @@ Following the hackleyclubz layout, everything runs as one Linux user:
 Deploy with rsync (`deploy/deploy.sh.example` → copy to `deploy/deploy.sh`),
 which never overwrites `config.local.php` or logs.
 
-`config.local.php` values that matter in production:
+`config.local.php` values that matter in production (see
+`www/config.local.php.example` for every option):
 
 - `DB_*` — the MySQL database (DreamHost's MySQL host, e.g. `mysql.brianrosenthal.org`).
-- `APP_NAME`, `MAIN_HOST = 'mastery.brianrosenthal.org'`.
+- `APP_NAME = 'Kids That Teach'`, `SMTP_FROM_NAME`.
+- `MAIN_HOST = 'kidsthatteach.org'` — the main site; every site is also
+  `{slug}.MAIN_HOST`, and a login on the main host is shared with the
+  subdomains (the session cookie's Domain is `MAIN_HOST` there).
+- `LEGACY_HOSTS = ['mastery.brianrosenthal.org']` — hostnames that 301 to `MAIN_HOST`.
+- `SUBDOMAIN_PROXY_KEY` — the Worker's `PROXY_KEY`; empty means the forwarded
+  hostname is ignored and subdomains stop resolving.
 - `SMTP_*` — for activation and password-reset emails. Links in emails use the
   `site_base_url` setting (Admin → Settings), so they always point at the main host.
 - `REMEMBER_TOKEN_KEY` — a long random string.
 - `SUPER_PASSWORD` — leave `''` in production.
 - `VIDEO_STORAGE_PROVIDER`, `R2_*`, `DREAMOBJECTS_*`, `VIDEO_MAX_BYTES` — see step 5.
 
-## 3. Database
+## 4. Database
 
 First install:
 
@@ -80,38 +111,28 @@ mysql -h mysql.brianrosenthal.org -u USER -p mastery_brianrosenthal < www/schema
 
 Later releases: `bash ~/mastery.brianrosenthal.org/db_migrations/migrate.sh`
 (or Admin → Migrations in the browser). Both record applied files in
-`schema_migrations`, so they can be mixed freely.
+`schema_migrations`, so they can be mixed freely. The rebrand release needs
+`003_rebrand_kidsthatteach.sql`, which updates the seeded site title and
+`site_base_url`; check Admin → Settings afterwards.
 
 Change the seeded admin password immediately (profile menu → Change Password).
 
-## 4. Web server
+`.htaccess` rewrites are honoured by default on panel-managed hosting. This
+app needs no `phprc` tweaks: video bytes never pass through PHP. PHP needs
+`curl`, `mbstring`, `pdo_mysql` and `iconv`.
 
-### 4a. Panel-managed hosting
+## Adding another kid later
 
-Nothing to do beyond the panel steps above. `.htaccess` rewrites are honoured
-by default. If uploads of the site's PHP settings are ever needed they go in a
-`phprc` file, but this app needs none: video bytes never pass through PHP.
+Nothing. Add the user in Admin → Users; their site is created with a slug from
+their first name and is live at `{slug}.kidsthatteach.org` immediately (the
+storage CORS rule is refreshed automatically so they can upload from there).
 
-### 4b. Self-managed VPS
-
-```bash
-sudo cp deploy/apache-vhost.conf.example /etc/apache2/sites-available/mastery.conf
-sudo nano /etc/apache2/sites-available/mastery.conf   # fix DocumentRoot / paths
-sudo a2enmod rewrite
-sudo a2ensite mastery
-sudo apache2ctl configtest && sudo systemctl reload apache2
-sudo certbot --apache -d mastery.brianrosenthal.org -d mastery.charlierosenthal.org -d mastery.lillyrosenthal.org
-```
-
-`AllowOverride All` is required (the rewrites live in `www/.htaccess`).
-PHP needs `curl`, `mbstring`, `pdo_mysql` and `iconv`.
-
-## Adding another kid's domain later
+Only a **custom domain** needs manual steps:
 
 1. Panel: add the domain as fully hosted with the shared web directory and
    Let's Encrypt (or, self-managed: `ServerAlias` + certbot with the extra `-d`).
-2. Admin → Sites → that site's Settings → Routing → Custom domain.
-3. Admin → Video Storage → *Apply CORS for all site origins*.
+2. Admin → Sites → that site's Settings → Routing → Custom domain (saving
+   re-applies CORS; Admin → Video Storage shows whether it worked).
 
 ## 5. Video storage (Cloudflare R2)
 
@@ -133,7 +154,9 @@ while videos remain there (see *Migrating from DreamObjects* below).
 4. Admin → Video Storage: the Cloudflare R2 card should read *Ready*. Click
    **Apply CORS for all site origins** (R2 accepts the same S3 CORS rule as
    DreamObjects; it is what lets a browser on each site PUT directly to the
-   bucket) and re-apply it whenever a domain is added. **Create bucket** is
+   bucket). The rule lists the main host, every site's subdomain and every
+   custom domain, and is re-applied automatically when a site is created or
+   its routing changes; re-apply here if that ever fails. **Create bucket** is
    there too if you skipped step 1.
 5. Click **Test upload** on the same page; it should report success against
    Cloudflare R2.
@@ -189,10 +212,18 @@ time: old videos keep playing from DreamObjects while new ones go to R2.
 
 ## 6. Smoke test after deploying
 
-- `https://mastery.brianrosenthal.org/` → login page; sign in → `/manage/`.
-- Admin → Users → add Charlie; his site is created automatically. Admin →
-  Sites → Settings → set domain `mastery.charlierosenthal.org`.
-- `https://mastery.charlierosenthal.org/` → Charlie's homepage (404 page
-  "This site is not public yet" if he unticked *public*).
-- Charlie signs in at `https://mastery.charlierosenthal.org/login.php` and sees
-  the owner bar on his own pages.
+- `https://kidsthatteach.org/` → login page; sign in → `/manage/`.
+- `https://www.kidsthatteach.org/` → redirects to the apex.
+- `https://mastery.brianrosenthal.org/manage/` → 301 to
+  `https://kidsthatteach.org/manage/`.
+- Admin → Users → add Milton; his site is created automatically.
+  `https://milton.kidsthatteach.org/` → Milton's homepage (404 page
+  "This site is not public yet" if he unticked *public*). Being signed in on
+  the apex, you already see the owner bar there.
+- Admin → Sites → Charlie's Settings → set custom domain
+  `mastery.charlierosenthal.org` (after the panel entry). Both
+  `https://mastery.charlierosenthal.org/` and
+  `https://charlie.kidsthatteach.org/` show his site.
+- Charlie signs in at `https://charlie.kidsthatteach.org/login.php` and sees
+  the owner bar on his own pages; from a concept editor there, upload a video
+  and play it back (this exercises the subdomain's CORS origin).

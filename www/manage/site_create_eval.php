@@ -2,6 +2,7 @@
 // Creates a user's site (POST from the dashboard when none exists yet).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ManageUI.php';
+require_once __DIR__ . '/../lib/VideoStorage.php';
 Application::init();
 require_login();
 
@@ -18,6 +19,7 @@ $dash = ManageUI::dashboardUrl($userId);
 try {
     $ctx = UserContext::getLoggedInUserContext();
     SiteManagement::createForUser($ctx, $userId, (string)$target['first_name'], (string)($_POST['title'] ?? ''));
+    VideoStorage::refreshCorsBestEffort($ctx);   // the new {slug} subdomain must be allowed to upload
     header('Location: ' . $dash . (strpos($dash, '?') === false ? '?' : '&') . 'msg=' . urlencode('Your site is ready. Add a category to get started.'));
 } catch (Throwable $e) {
     header('Location: ' . $dash . (strpos($dash, '?') === false ? '?' : '&') . 'err=' . urlencode('Could not create the site: ' . $e->getMessage()));
