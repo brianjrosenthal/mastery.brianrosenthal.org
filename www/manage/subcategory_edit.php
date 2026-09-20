@@ -4,6 +4,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ManageUI.php';
 require_once __DIR__ . '/../lib/ContentAccess.php';
 require_once __DIR__ . '/../lib/SubcategoryManagement.php';
+require_once __DIR__ . '/../lib/ConceptManagement.php';
 Application::init();
 require_login();
 
@@ -24,12 +25,13 @@ $stash = ManageUI::takeForm('subcategory_edit_' . $id);
 $form = $stash['data'] + $sub;
 $err = $stash['err'];
 $msg = $_GET['msg'] ?? null;
-$conceptCount = 0;
-foreach (SubcategoryManagement::listForCategory((int)$sub['category_id']) as $row) {
-    if ((int)$row['id'] === $id) { $conceptCount = (int)$row['concept_count']; }
-}
+$concepts = ConceptManagement::listForSubcategory($id, true);
+$conceptCount = count($concepts);
+$site = SiteManagement::findByUserId($userId);
+$base = $site ? SiteResolver::basePathFor($site) : '';
+$selfUrl = '/manage/subcategory_edit.php?id=' . $id;
 
-ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
+ApplicationUI::useSiteTheme($site);
 header_html('Edit ' . $sub['name']);
 ?>
 <div class="crumbs"><a href="<?=h(ManageUI::dashboardUrl($userId))?>">Manage</a> › <a href="/manage/category_edit.php?id=<?= (int)$cat['id'] ?>"><?=h($cat['name'])?></a> › <?=h($sub['name'])?></div>
@@ -62,6 +64,25 @@ header_html('Edit ' . $sub['name']);
       <a class="button" href="<?=h(ManageUI::nextOr(ManageUI::dashboardUrl($userId)))?>">Cancel</a>
     </div>
   </form>
+</div>
+
+<div class="card">
+  <h3>Concepts</h3>
+  <?php if ($concepts === []): ?>
+    <p class="muted">No concepts yet. <a href="/manage/concept_add.php?subcategory_id=<?= $id ?>&next=<?= urlencode($selfUrl) ?>">Add the first concept</a>.</p>
+  <?php else: ?>
+    <ul class="tree">
+      <?php foreach ($concepts as $c): ?>
+        <li><div class="tree-node">
+          <a class="title" href="<?=h(SiteResolver::urlFor($base, (string)$cat['slug'], (string)$sub['slug'], (string)$c['slug']))?>"><?=h($c['title'])?></a>
+          <?= !empty($c['is_published']) ? '<span class="badge published">Published</span>' : '<span class="badge draft">Draft</span>' ?>
+          <?= !empty($c['video_object_key']) ? '<span class="badge video">&#9654; Video</span>' : '<span class="badge novideo">No video</span>' ?>
+          <span class="tools"><a href="/manage/concept_edit.php?id=<?= (int)$c['id'] ?>&next=<?= urlencode($selfUrl) ?>">Edit</a></span>
+        </div></li>
+      <?php endforeach; ?>
+    </ul>
+    <div class="tree-add level-1"><a class="button small" href="/manage/concept_add.php?subcategory_id=<?= $id ?>&next=<?= urlencode($selfUrl) ?>">+ Add concept</a></div>
+  <?php endif; ?>
 </div>
 
 <div class="card">
