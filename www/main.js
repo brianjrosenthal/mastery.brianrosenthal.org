@@ -84,10 +84,47 @@ function setupConfirmButtons() {
   });
 }
 
+// Concept page video (opt in with data-autoplay): start playing on load.
+// Browsers block audible autoplay until the visitor has interacted with the
+// site, so when play() is refused we retry muted and offer an Unmute button.
+function setupAutoplayVideo() {
+  var video = document.querySelector('video[data-autoplay]');
+  if (!video || typeof video.play !== 'function') return;
+
+  function showUnmute() {
+    var frame = video.parentNode;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'video-unmute';
+    btn.textContent = '\uD83D\uDD07 Tap to unmute';
+    btn.addEventListener('click', function () {
+      video.muted = false;
+      video.currentTime = 0;
+      video.play().catch(function () {});
+      btn.remove();
+    });
+    video.addEventListener('volumechange', function () {
+      if (!video.muted) btn.remove();
+    });
+    frame.appendChild(btn);
+  }
+
+  var attempt = video.play();
+  if (!attempt || typeof attempt.catch !== 'function') return;
+  attempt.catch(function () {
+    video.muted = true;
+    var retry = video.play();
+    if (retry && typeof retry.then === 'function') {
+      retry.then(showUnmute).catch(function () { video.muted = false; });
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function () {
   setupPopupMenus();
   setupAutoSubmit();
   setupConfirmButtons();
+  setupAutoplayVideo();
 
   // Focus first input on auth pages
   if (document.body.classList.contains('auth')) {

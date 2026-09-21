@@ -197,7 +197,9 @@ final class SiteUI {
         }
         $src = VideoStorage::playbackUrlForConcept($concept);
         $type = (string)($concept['video_content_type'] ?? '');
-        return '<div class="video-frame"><video controls playsinline preload="metadata" src="' . self::h($src) . '"'
+        // autoplay is attempted with sound; main.js falls back to muted playback
+        // (with an Unmute button) where the browser blocks audible autoplay.
+        return '<div class="video-frame"><video controls playsinline autoplay preload="auto" data-autoplay src="' . self::h($src) . '"'
              . ($type !== '' ? ' type="' . self::h($type) . '"' : '') . '>'
              . 'Your browser cannot play this video. <a href="' . self::h($src) . '">Download it</a> instead.'
              . '</video></div>';
