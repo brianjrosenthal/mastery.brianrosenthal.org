@@ -331,6 +331,7 @@ table.list td.num, table.list th.num { text-align: right; }
 }
 .tree-node .tools a:hover, .tree-node .tools button:hover { border-color: var(--color-primary); color: var(--color-primary-dark); }
 .tree-node .tools button.danger:hover { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.tree-node .qa-inbox-text { flex-basis: 100%; font-size: 0.9rem; color: var(--color-ink-muted); white-space: pre-wrap; }
 .tree-add { margin-left: 44px; font-size: 0.85rem; }
 .tree-add.level-1 { margin-left: 0; }
 .tree-add.level-2 { margin-left: 22px; }
@@ -408,44 +409,6 @@ table.list td.num, table.list th.num { text-align: right; }
   font-size: 1rem;
 }
 .resource-row .remove:hover { border-color: var(--color-accent); color: var(--color-accent-dark); }
-
-/* ===== Manage: video panel ===== */
-
-.video-panel .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
-.video-panel .tab {
-  border: 2px solid var(--color-border);
-  background: #fff;
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-family: inherit;
-  font-weight: 700;
-  cursor: pointer;
-  color: var(--color-ink-muted);
-}
-.video-panel .tab.active { border-color: var(--color-primary); color: var(--color-primary-dark); background: var(--color-primary-soft); }
-.video-panel video, .video-panel .video-current video {
-  width: 100%;
-  max-height: 420px;
-  background: #000;
-  border-radius: var(--radius);
-}
-.video-panel .video-current { margin-bottom: 14px; }
-.video-panel .rec-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
-.rec-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--color-accent); margin-right: 6px; animation: recblink 1s infinite; }
-@keyframes recblink { 50% { opacity: 0.2; } }
-.rec-timer { font-family: var(--font-mono); font-weight: 700; }
-.upload-progress { height: 12px; background: var(--color-border); border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.upload-progress > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--color-sky), var(--color-primary)); transition: width 120ms linear; }
-.upload-status { font-size: 0.88rem; color: var(--color-ink-muted); margin-top: 6px; }
-.dropzone {
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius);
-  padding: 22px;
-  text-align: center;
-  color: var(--color-ink-muted);
-  background: #FFFDF9;
-}
-.dropzone.over { border-color: var(--color-primary); background: var(--color-primary-soft); }
 
 /* ===== Auth pages ===== */
 

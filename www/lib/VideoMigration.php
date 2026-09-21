@@ -4,14 +4,16 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/VideoStorage.php';
 require_once __DIR__ . '/ConceptManagement.php';
+require_once __DIR__ . '/QuestionManagement.php';
 require_once __DIR__ . '/ActivityLog.php';
 
 /**
- * Moves concept videos between storage providers — in practice from DreamHost
- * DreamObjects to Cloudflare R2. One concept at a time: copy the object under
- * the SAME key into the destination bucket, confirm the copy is there with the
- * same size, then flip concepts.video_storage so playback and deletion address
- * the new bucket. The source object is left in place unless asked otherwise,
+ * Moves videos between storage providers — in practice from DreamHost
+ * DreamObjects to Cloudflare R2. Two tables hold videos, concepts and
+ * concept_questions (answer videos); every row is a "kind" + id here. One
+ * video at a time: copy the object under the SAME key into the destination
+ * bucket, confirm the copy is there with the same size, then flip the row's
+ * video_storage so playback and deletion address the new bucket. The source object is left in place unless asked otherwise,
  * so a half-finished migration is always safe: every row still points at an
  * object that exists.
  *
@@ -32,23 +34,36 @@ final class VideoMigration {
     /** Abort a transfer that moves under 1 KB/s for this many seconds. */
     private const STALL_SECONDS = 120;
 
+    /** The two tables that hold videos, by row kind. */
+    private const TABLES = ['concept' => 'concepts', 'question' => 'concept_questions'];
+
     /**
-     * Concept rows whose video is held somewhere other than $to.
-     * @return array<int,array{id:int,title:string,video_object_key:string,video_storage:string,video_size_bytes:int,video_content_type:string}>
+     * Every video (concepts and answers) held somewhere other than $to,
+     * concepts first. Each row has kind ('concept'|'question'), id, the
+     * concept_id it belongs to and a title to show.
+     * @return array<int,array{kind:string,id:int,concept_id:int,title:string,video_object_key:string,video_storage:string,video_size_bytes:int,video_content_type:string}>
      */
     public static function pending(?string $to = null): array {
         $to = VideoStorage::assertProvider($to ?? VideoStorage::activeProvider());
         $st = pdo()->prepare(
-            'SELECT id, title, video_object_key, video_storage, video_size_bytes, video_content_type
+            "SELECT 'concept' AS kind, id, id AS concept_id, title,
+                    video_object_key, video_storage, video_size_bytes, video_content_type
              FROM concepts
              WHERE video_object_key IS NOT NULL AND (video_storage IS NULL OR video_storage <> ?)
-             ORDER BY id'
+             UNION ALL
+             SELECT 'question', q.id, q.concept_id, CONCAT('Answer to question #', q.id, ' on \"', k.title, '\"'),
+                    q.video_object_key, q.video_storage, q.video_size_bytes, q.video_content_type
+             FROM concept_questions q JOIN concepts k ON k.id = q.concept_id
+             WHERE q.video_object_key IS NOT NULL AND (q.video_storage IS NULL OR q.video_storage <> ?)
+             ORDER BY kind, id"
         );
-        $st->execute([$to]);
+        $st->execute([$to, $to]);
         $out = [];
         foreach ($st->fetchAll() as $row) {
             $out[] = [
+                'kind'               => (string)$row['kind'],
                 'id'                 => (int)$row['id'],
+                'concept_id'         => (int)$row['concept_id'],
                 'title'              => (string)$row['title'],
                 'video_object_key'   => (string)$row['video_object_key'],
                 'video_storage'      => VideoStorage::providerOf($row),
@@ -59,10 +74,14 @@ final class VideoMigration {
         return $out;
     }
 
-    /** How many videos are held per provider, e.g. ['r2' => 12, 'dreamobjects' => 3]. */
+    /** How many videos (concepts and answers) are held per provider, e.g. ['r2' => 12, 'dreamobjects' => 3]. */
     public static function countsByProvider(): array {
         $counts = array_fill_keys(array_keys(VideoStorage::PROVIDERS), 0);
-        $rows = pdo()->query('SELECT video_storage, COUNT(*) AS n FROM concepts WHERE video_object_key IS NOT NULL GROUP BY video_storage')->fetchAll();
+        $rows = pdo()->query(
+            'SELECT video_storage, COUNT(*) AS n FROM concepts WHERE video_object_key IS NOT NULL GROUP BY video_storage
+             UNION ALL
+             SELECT video_storage, COUNT(*) FROM concept_questions WHERE video_object_key IS NOT NULL GROUP BY video_storage'
+        )->fetchAll();
         foreach ($rows as $row) {
             $counts[VideoStorage::providerOf($row)] += (int)$row['n'];
         }
@@ -70,29 +89,68 @@ final class VideoMigration {
     }
 
     /**
+     * Every object key the database references (concept and answer videos),
+     * all of them or only those held by one provider: the inventory that
+     * Admin -> Video Storage compares against the bucket, so anything not in
+     * this list is an orphan that may be deleted.
+     * @return string[]
+     */
+    public static function listRecordedObjectKeys(?string $provider = null): array {
+        return array_merge(ConceptManagement::listVideoObjectKeys($provider), QuestionManagement::listVideoObjectKeys($provider));
+    }
+
+    /**
      * Copy one concept's video into $to (the active provider by default) and
-     * record it. Idempotent: a concept already at $to is reported as skipped,
-     * and a copy that already exists with the right size (e.g. made with
-     * rclone) is not re-transferred.
-     *
-     * @param callable|null $transfer fn(string $key, string $from, string $to, string $contentType): void —
-     *                                 defaults to transferObject(). Tests inject a fake.
-     * @return array{concept_id:int,key:string,from:string,to:string,size:int,skipped:bool,copied:bool,source_deleted:bool,warning:?string}
-     * @throws RuntimeException when the source object is missing, the copy cannot be verified,
-     *                          or the concept's video changed during the transfer.
+     * record it. See migrateVideo().
      */
     public static function migrateConcept(?UserContext $ctx, int $conceptId, ?string $to = null, ?callable $transfer = null, bool $deleteSource = false): array {
+        return self::migrateVideo($ctx, 'concept', $conceptId, $to, $transfer, $deleteSource);
+    }
+
+    /** Copy one answer video into $to and record it. See migrateVideo(). */
+    public static function migrateQuestion(?UserContext $ctx, int $questionId, ?string $to = null, ?callable $transfer = null, bool $deleteSource = false): array {
+        return self::migrateVideo($ctx, 'question', $questionId, $to, $transfer, $deleteSource);
+    }
+
+    /** Migrate a row as pending() describes it (its kind and id). */
+    public static function migratePending(?UserContext $ctx, array $pendingRow, ?string $to = null, ?callable $transfer = null, bool $deleteSource = false): array {
+        return self::migrateVideo($ctx, (string)$pendingRow['kind'], (int)$pendingRow['id'], $to, $transfer, $deleteSource);
+    }
+
+    /**
+     * Copy one video into $to and record it. Idempotent: a row already at $to
+     * is reported as skipped, and a copy that already exists with the right
+     * size (e.g. made with rclone) is not re-transferred.
+     *
+     * @param string        $kind     'concept' or 'question'
+     * @param callable|null $transfer fn(string $key, string $from, string $to, string $contentType): void —
+     *                                 defaults to transferObject(). Tests inject a fake.
+     * @return array{kind:string,id:int,concept_id:int,key:string,from:string,to:string,size:int,skipped:bool,copied:bool,source_deleted:bool,warning:?string}
+     * @throws RuntimeException when the source object is missing, the copy cannot be verified,
+     *                          or the row's video changed during the transfer.
+     */
+    private static function migrateVideo(?UserContext $ctx, string $kind, int $id, ?string $to, ?callable $transfer, bool $deleteSource): array {
+        if (!isset(self::TABLES[$kind])) {
+            throw new InvalidArgumentException('Unknown video kind "' . $kind . '".');
+        }
+        $table = self::TABLES[$kind];
+        $what = $kind . ' #' . $id;
         $to = VideoStorage::assertProvider($to ?? VideoStorage::activeProvider());
-        $concept = ConceptManagement::findById($conceptId);
-        if (!$concept) {
-            throw new RuntimeException('Concept not found.');
+
+        $st = pdo()->prepare($kind === 'concept'
+            ? 'SELECT id, id AS concept_id, video_object_key, video_storage, video_content_type FROM concepts WHERE id = ?'
+            : 'SELECT id, concept_id, video_object_key, video_storage, video_content_type FROM concept_questions WHERE id = ?');
+        $st->execute([$id]);
+        $row = $st->fetch();
+        if (!$row) {
+            throw new RuntimeException(ucfirst($kind) . ' not found.');
         }
-        $key = (string)($concept['video_object_key'] ?? '');
+        $key = (string)($row['video_object_key'] ?? '');
         if ($key === '') {
-            throw new RuntimeException('Concept #' . $conceptId . ' has no video.');
+            throw new RuntimeException(ucfirst($what) . ' has no video.');
         }
-        $from = VideoStorage::providerOf($concept);
-        $result = ['concept_id' => $conceptId, 'key' => $key, 'from' => $from, 'to' => $to, 'size' => 0,
+        $from = VideoStorage::providerOf($row);
+        $result = ['kind' => $kind, 'id' => $id, 'concept_id' => (int)$row['concept_id'], 'key' => $key, 'from' => $from, 'to' => $to, 'size' => 0,
                    'skipped' => false, 'copied' => false, 'source_deleted' => false, 'warning' => null];
         if ($from === $to) {
             $result['skipped'] = true;
@@ -100,10 +158,10 @@ final class VideoMigration {
         }
         $source = VideoStorage::storage($from)->headObject(VideoStorage::bucket($from), $key);
         if ($source === null) {
-            throw new RuntimeException('The video for concept #' . $conceptId . ' is missing from ' . VideoStorage::providerLabel($from) . ' (' . $key . ').');
+            throw new RuntimeException('The video for ' . $what . ' is missing from ' . VideoStorage::providerLabel($from) . ' (' . $key . ').');
         }
         $size = (int)$source['size'];
-        $contentType = (string)($concept['video_content_type'] ?: $source['content_type']);
+        $contentType = (string)($row['video_content_type'] ?: $source['content_type']);
         $result['size'] = $size;
 
         $destination = VideoStorage::storage($to);
@@ -123,12 +181,13 @@ final class VideoMigration {
 
         // Only flip the row if it still points at the object we copied: a long
         // transfer could overlap the owner replacing the video.
-        $st = pdo()->prepare('UPDATE concepts SET video_storage = ? WHERE id = ? AND video_object_key = ?');
-        $st->execute([$to, $conceptId, $key]);
+        $st = pdo()->prepare('UPDATE ' . $table . ' SET video_storage = ? WHERE id = ? AND video_object_key = ?');
+        $st->execute([$to, $id, $key]);
         if ($st->rowCount() !== 1) {
-            throw new RuntimeException('The video for concept #' . $conceptId . ' changed during the copy; run the migration again.');
+            throw new RuntimeException('The video for ' . $what . ' changed during the copy; run the migration again.');
         }
-        ActivityLog::log($ctx, 'concept.video_migrate', ['concept_id' => $conceptId, 'object_key' => $key, 'from' => $from, 'to' => $to, 'size_bytes' => $size]);
+        $meta = [$kind . '_id' => $id, 'object_key' => $key, 'from' => $from, 'to' => $to, 'size_bytes' => $size];
+        ActivityLog::log($ctx, $kind . '.video_migrate', $meta);
 
         if ($deleteSource) {
             try {
@@ -136,7 +195,7 @@ final class VideoMigration {
                 $result['source_deleted'] = true;
             } catch (\Throwable $e) {
                 $result['warning'] = 'Copied and recorded, but deleting the original from ' . VideoStorage::providerLabel($from) . ' failed: ' . $e->getMessage();
-                ActivityLog::log($ctx, 'concept.video_delete_failed', ['concept_id' => $conceptId, 'object_key' => $key, 'provider' => $from, 'error' => $e->getMessage()]);
+                ActivityLog::log($ctx, $kind . '.video_delete_failed', [$kind . '_id' => $id, 'object_key' => $key, 'provider' => $from, 'error' => $e->getMessage()]);
             }
         }
         return $result;

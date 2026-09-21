@@ -1,0 +1,54 @@
+/* Video upload/record panel (ManageUI::videoUploadPanelHtml + manage/video.js).
+   Used on the concept editor (styles.css theme, --color-* variables) and on
+   public concept pages for answer videos (site.css theme, --accent/--ink
+   variables), so every colour is a --vp-* variable that falls back from one
+   theme to the other. */
+
+.video-panel {
+  --vp-primary: var(--color-primary, var(--accent, #2563EB));
+  --vp-primary-dark: var(--color-primary-dark, var(--accent-dark, #1D4ED8));
+  --vp-primary-soft: var(--color-primary-soft, var(--accent-soft, #DBEAFE));
+  --vp-border: var(--color-border, var(--border, #E5E7EB));
+  --vp-muted: var(--color-ink-muted, var(--ink-muted, #6B7280));
+  --vp-danger: var(--color-accent, #E85454);
+  --vp-radius: var(--radius, 12px);
+  --vp-mono: var(--font-mono, ui-monospace, Menlo, monospace);
+}
+.video-panel .hidden { display: none !important; }
+.video-panel .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.video-panel .tab {
+  border: 2px solid var(--vp-border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  color: var(--vp-muted);
+}
+.video-panel .tab.active { border-color: var(--vp-primary); color: var(--vp-primary-dark); background: var(--vp-primary-soft); }
+.video-panel video, .video-panel .video-current video {
+  width: 100%;
+  max-height: 420px;
+  background: #000;
+  border-radius: var(--vp-radius);
+}
+.video-panel .video-current { margin-bottom: 14px; }
+.video-panel .rec-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.video-panel .rec-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--vp-danger); margin-right: 6px; animation: recblink 1s infinite; }
+@keyframes recblink { 50% { opacity: 0.2; } }
+.video-panel .rec-timer { font-family: var(--vp-mono); font-weight: 700; }
+.video-panel .upload-progress { height: 12px; background: var(--vp-border); border-radius: 999px; overflow: hidden; margin-top: 10px; }
+.video-panel .upload-progress > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--vp-primary-soft), var(--vp-primary)); transition: width 120ms linear; }
+.video-panel .upload-status { font-size: 0.88rem; color: var(--vp-muted); margin-top: 6px; }
+.video-panel .upload-status.is-error { color: var(--vp-danger); }
+.video-panel .dropzone {
+  border: 2px dashed var(--vp-border);
+  border-radius: var(--vp-radius);
+  padding: 22px;
+  text-align: center;
+  color: var(--vp-muted);
+  background: #FFFDF9;
+}
+.video-panel .dropzone.over { border-color: var(--vp-primary); background: var(--vp-primary-soft); }
+.video-panel .dropzone label { display: inline; font-weight: 700; color: var(--vp-primary); cursor: pointer; }

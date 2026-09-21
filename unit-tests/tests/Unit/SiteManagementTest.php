@@ -24,6 +24,7 @@ final class SiteManagementTest extends TestCase
         $this->assertNull($site['domain']);
         $this->assertSame('blue', $site['accent_color']);
         $this->assertSame(1, (int)$site['is_public']);
+        $this->assertSame(1, (int)$site['questions_public'], 'questions are shown to visitors unless the owner opts out');
         $this->assertNotSame('', $site['homepage_markdown']);
         $this->assertSame($id, (int)SiteManagement::findByUserId($this->charlie->id)['id']);
         $this->assertSame($id, (int)SiteManagement::findBySlug('CHARLIE')['id']);
@@ -68,6 +69,12 @@ final class SiteManagementTest extends TestCase
         $this->assertSame('Charlie Learns', $site['title']);
         $this->assertSame('mint', $site['accent_color']);
         $this->assertSame(0, (int)$site['is_public']);
+        $this->assertSame(1, (int)$site['questions_public'], 'untouched when the key is absent');
+
+        SiteManagement::updateSiteContent($this->charlie, $id, ['questions_public' => false]);
+        $site = SiteManagement::findById($id);
+        $this->assertSame(0, (int)$site['questions_public']);
+        $this->assertSame('Charlie Learns', $site['title'], 'other fields keep their values');
 
         SiteManagement::updateSiteRouting($this->admin, $id, 'charlie-r', 'https://Mastery.CharlieRosenthal.org/');
         $site = SiteManagement::findById($id);

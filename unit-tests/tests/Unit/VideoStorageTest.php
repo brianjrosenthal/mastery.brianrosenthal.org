@@ -62,6 +62,20 @@ final class VideoStorageTest extends TestCase
         VideoStorage::newObjectKeyFor(3, 17, 'application/pdf');
     }
 
+    public function testAnswerKeysLiveInTheirOwnNamespace(): void
+    {
+        $a = VideoStorage::newAnswerObjectKeyFor(3, 17, 'video/webm');
+        $this->assertMatchesRegularExpression('#^videos/3/answers/17/[0-9a-f]{32}\\.webm$#', $a);
+        $this->assertNotSame($a, VideoStorage::newAnswerObjectKeyFor(3, 17, 'video/webm'));
+        $this->assertTrue(VideoStorage::keyBelongsToAnswer($a, 17));
+        $this->assertFalse(VideoStorage::keyBelongsToAnswer($a, 18));
+        $this->assertFalse(VideoStorage::keyBelongsToConcept($a, 17), 'an answer video can never be attached to a concept');
+        $concept = VideoStorage::newObjectKeyFor(3, 17, 'video/mp4');
+        $this->assertFalse(VideoStorage::keyBelongsToAnswer($concept, 17), 'nor a concept video to a question');
+        $this->expectException(InvalidArgumentException::class);
+        VideoStorage::newAnswerObjectKeyFor(3, 17, 'image/gif');
+    }
+
     public function testPresignUploadSignsOnlyTheHostAndSendsNoAclHeader(): void
     {
         // DreamObjects rejects canned ACLs ("Unsupported value for canned acl

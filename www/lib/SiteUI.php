@@ -7,6 +7,8 @@ require_once __DIR__ . '/SiteManagement.php';
 require_once __DIR__ . '/SiteResolver.php';
 require_once __DIR__ . '/MarkdownRenderer.php';
 require_once __DIR__ . '/VideoStorage.php';
+require_once __DIR__ . '/ManageUI.php';
+require_once __DIR__ . '/QuestionManagement.php';
 
 /**
  * Chrome and reusable fragments for a user's PUBLIC site (what visitors to
@@ -42,6 +44,7 @@ final class SiteUI {
         echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>' . self::h($fullTitle) . '</title>';
         echo ApplicationUI::cssLink('/site.css');
+        echo ApplicationUI::cssLink('/video-panel.css');
         echo '<style>' . self::accentStyle($site) . '</style>';
         echo '</head><body class="site">';
 
@@ -205,6 +208,108 @@ final class SiteUI {
              . '</video></div>';
     }
 
+    /**
+     * The Q&A section under a concept: a way to ask (or a login link), then
+     * every question the viewer may see. The owner gets, under each question,
+     * an answer editor with a text box and a video panel; an asker may delete
+     * their own question while it is unanswered.
+     *
+     * @param array{data:array,err:?string} $askForm  a failed ask, restored (ManageUI::takeForm)
+     */
+    public static function questionsHtml(array $concept, array $questions, ?UserContext $viewer, bool $canEdit, string $here, array $askForm, ?string $msg, ?string $err): string {
+        $conceptId = (int)$concept['id'];
+        $html = '<section class="qa" id="questions">';
+        $html .= '<h2 class="section-title">Questions</h2>';
+        if ($msg !== null && $msg !== '') {
+            $html .= '<p class="flash">' . self::h($msg) . '</p>';
+        }
+        if ($err !== null && $err !== '') {
+            $html .= '<p class="error">' . self::h($err) . '</p>';
+        }
+
+        if ($viewer !== null) {
+            $html .= '<form method="post" action="/manage/question_ask_eval.php" class="qa-form" id="ask">'
+                   . '<input type="hidden" name="csrf" value="' . self::h(csrf_token()) . '">'
+                   . '<input type="hidden" name="concept_id" value="' . $conceptId . '">'
+                   . '<input type="hidden" name="next" value="' . self::h($here) . '">'
+                   . '<label for="question_text">Something unclear? Ask about it and get an answer in words or on video.</label>'
+                   . ($askForm['err'] ? '<p class="error">' . self::h($askForm['err']) . '</p>' : '')
+                   . '<textarea name="question_text" id="question_text" rows="3" maxlength="' . QuestionManagement::MAX_QUESTION_CHARS . '" required placeholder="Your question">'
+                   . self::h((string)($askForm['data']['question_text'] ?? '')) . '</textarea>'
+                   . '<div class="actions"><button type="submit" class="button primary">Ask</button></div>'
+                   . '</form>';
+        } else {
+            $html .= '<p class="qa-login"><a class="button-link" href="/login.php?next=' . self::h(urlencode($here)) . '">Log in to ask a question</a></p>';
+        }
+
+        if ($questions === []) {
+            $html .= '<p class="site-empty">No questions yet.</p>';
+        }
+        foreach ($questions as $q) {
+            $html .= self::questionHtml($q, $viewer, $canEdit, $here);
+        }
+        return $html . '</section>';
+    }
+
+    /** One question with its answer and, for the owner, the answer editor. */
+    private static function questionHtml(array $q, ?UserContext $viewer, bool $canEdit, string $here): string {
+        $id = (int)$q['id'];
+        $answered = $q['answered_at'] !== null;
+        $asker = trim((string)($q['asker_first_name'] ?? ''));
+        $askerLabel = $asker !== '' ? $asker : 'A former member';
+        $isAsker = $viewer !== null && $q['asked_by_user_id'] !== null && (int)$q['asked_by_user_id'] === $viewer->id;
+        $mayDelete = $canEdit || ($isAsker && !$answered);
+
+        $html = '<article class="qa-item' . ($answered ? '' : ' qa-unanswered') . '" id="q' . $id . '">';
+        $html .= '<div class="qa-question">'
+               . '<p class="qa-meta"><strong>' . self::h($askerLabel) . '</strong> asked on ' . self::h(date('M j, Y', strtotime((string)$q['created_at'])))
+               . (!$answered ? ' <span class="qa-badge">Waiting for an answer</span>' : '') . '</p>'
+               . '<p class="qa-text">' . nl2br(self::h((string)$q['question_text'])) . '</p>';
+        if ($mayDelete) {
+            $html .= '<form method="post" action="/manage/question_delete_eval.php" class="qa-inline-form">'
+                   . '<input type="hidden" name="csrf" value="' . self::h(csrf_token()) . '">'
+                   . '<input type="hidden" name="id" value="' . $id . '">'
+                   . '<input type="hidden" name="next" value="' . self::h($here) . '">'
+                   . '<button type="submit" class="button small danger" data-confirm="Delete this question?">Delete question</button>'
+                   . '</form>';
+        }
+        $html .= '</div>';
+
+        $hasVideo = (string)($q['video_object_key'] ?? '') !== '';
+        $answerText = (string)($q['answer_markdown'] ?? '');
+        if ($answered && ($hasVideo || $answerText !== '')) {
+            $html .= '<div class="qa-answer">'
+                   . '<p class="qa-meta"><strong>Answer</strong> · ' . self::h(date('M j, Y', strtotime((string)$q['answered_at']))) . '</p>';
+            if ($hasVideo) {
+                $src = VideoStorage::playbackUrlForConcept($q);
+                $html .= '<div class="video-frame"><video controls playsinline preload="metadata" src="' . self::h($src) . '">'
+                       . 'Your browser cannot play this video. <a href="' . self::h($src) . '">Download it</a> instead.'
+                       . '</video></div>';
+            }
+            $html .= self::proseHtml($answerText);
+            $html .= '</div>';
+        }
+
+        if ($canEdit) {
+            $stash = ManageUI::takeForm('question_answer_' . $id);
+            $draft = (string)($stash['data']['answer_markdown'] ?? $answerText);
+            $html .= '<details class="qa-editor"' . ($answered && !$stash['err'] ? '' : ' open') . '>'
+                   . '<summary>' . ($answered ? 'Edit the answer' : 'Answer this question') . '</summary>'
+                   . '<form method="post" action="/manage/question_answer_eval.php" class="qa-form">'
+                   . '<input type="hidden" name="csrf" value="' . self::h(csrf_token()) . '">'
+                   . '<input type="hidden" name="id" value="' . $id . '">'
+                   . '<input type="hidden" name="next" value="' . self::h($here) . '">'
+                   . ($stash['err'] ? '<p class="error">' . self::h($stash['err']) . '</p>' : '')
+                   . '<label for="answer_' . $id . '">Answer in words <span class="small">(Markdown works)</span></label>'
+                   . '<textarea name="answer_markdown" id="answer_' . $id . '" rows="5">' . self::h($draft) . '</textarea>'
+                   . '<div class="actions"><button type="submit" class="button primary">Save answer</button></div>'
+                   . '</form>'
+                   . ManageUI::answerVideoPanelHtml($q, $here)
+                   . '</details>';
+        }
+        return $html . '</article>';
+    }
+
     public static function resourcesHtml(array $resources): string {
         if ($resources === []) {
             return '';
@@ -247,6 +352,7 @@ final class SiteUI {
         echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>Not found · ' . self::h($title) . '</title>';
         echo ApplicationUI::cssLink('/site.css');
+        echo ApplicationUI::cssLink('/video-panel.css');
         if ($site) {
             echo '<style>' . self::accentStyle($site) . '</style>';
         }

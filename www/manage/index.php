@@ -4,6 +4,7 @@
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ManageUI.php';
 require_once __DIR__ . '/../lib/CategoryManagement.php';
+require_once __DIR__ . '/../lib/QuestionManagement.php';
 Application::init();
 require_login();
 
@@ -57,6 +58,8 @@ header_html($isMe ? 'My Site' : 'Manage ' . $target['first_name']);
     <?php endif; ?>
     <?php if (empty($site['is_public'])): ?> · <span class="status-pending">Not public</span><?php endif; ?>
   </p>
+
+  <?= ManageUI::unansweredQuestionsHtml(QuestionManagement::listUnansweredForOwner($userId), $site) ?>
 
   <div class="card">
     <h3>Content</h3>

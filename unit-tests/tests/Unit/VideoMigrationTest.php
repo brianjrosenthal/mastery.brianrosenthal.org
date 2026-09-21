@@ -43,6 +43,18 @@ final class VideoMigrationTest extends TestCase
         return ['id' => $id, 'key' => $key];
     }
 
+    /** An answered question whose answer video sits in DreamObjects. */
+    private function legacyAnswer(int $conceptId, int $size = 555): array
+    {
+        $asker = test_seed_user('asker' . $size . '@example.com', 'Asker');
+        $id = QuestionManagement::ask($asker, $conceptId, 'Why?');
+        $key = VideoStorage::newAnswerObjectKeyFor($this->charlie->id, $id, 'video/webm');
+        $this->dream()->seedObject(VideoStorage::bucket('dreamobjects'), $key, $size, 'video/webm');
+        pdo()->prepare("UPDATE concept_questions SET video_object_key = ?, video_storage = 'dreamobjects', video_content_type = 'video/webm', video_size_bytes = ?, video_uploaded_at = NOW(), answered_at = NOW() WHERE id = ?")
+            ->execute([$key, $size, $id]);
+        return ['id' => $id, 'key' => $key];
+    }
+
     /** A transfer that copies the object between the fakes (and counts calls). */
     private function fakeTransfer(int &$calls, ?int $sizeOverride = null): callable
     {
@@ -70,6 +82,42 @@ final class VideoMigrationTest extends TestCase
         $this->assertSame([100, 200], array_column($pending, 'video_size_bytes'));
         $this->assertSame(['r2' => 1, 'dreamobjects' => 2], VideoMigration::countsByProvider());
         $this->assertSame([$id], array_column(VideoMigration::pending('dreamobjects'), 'id'), 'pending is relative to the destination');
+    }
+
+    public function testAnswerVideosArePendingCountedInventoriedAndMigratedToo(): void
+    {
+        $concept = $this->legacyConcept('Old', 100);
+        $answer = $this->legacyAnswer($concept['id'], 555);
+        $newConcept = ConceptManagement::create($this->charlie, $this->subcategoryId, ['title' => 'New']);
+        $freshKey = VideoStorage::newObjectKeyFor($this->charlie->id, $newConcept, 'video/mp4');
+        $this->r2()->seedObject(VideoStorage::bucket('r2'), $freshKey, 7, 'video/mp4');
+        ConceptManagement::attachVideo($this->charlie, $newConcept, $freshKey, 'video/mp4', 7);
+
+        $pending = VideoMigration::pending();
+        $this->assertSame([['concept', $concept['id']], ['question', $answer['id']]], array_map(fn($r) => [$r['kind'], $r['id']], $pending), 'concepts first, then answers');
+        $this->assertSame($concept['id'], $pending[1]['concept_id']);
+        $this->assertStringContainsString('Answer to question #' . $answer['id'] . ' on "Old"', $pending[1]['title']);
+        $this->assertSame(['r2' => 1, 'dreamobjects' => 2], VideoMigration::countsByProvider(), 'answer videos count');
+        $this->assertSame([$concept['key'], $answer['key']], VideoMigration::listRecordedObjectKeys('dreamobjects'));
+        $this->assertSame([$freshKey], VideoMigration::listRecordedObjectKeys('r2'));
+        $this->assertSame([$concept['key'], $freshKey, $answer['key']], VideoMigration::listRecordedObjectKeys(), 'the orphan inventory covers both tables');
+
+        $calls = 0;
+        $result = VideoMigration::migratePending($this->charlie, $pending[1], null, $this->fakeTransfer($calls), true);
+        $this->assertSame(['question', $answer['id'], 'dreamobjects', 'r2', 555, true, true], [$result['kind'], $result['id'], $result['from'], $result['to'], $result['size'], $result['copied'], $result['source_deleted']]);
+        $q = QuestionManagement::findById($answer['id']);
+        $this->assertSame('r2', $q['video_storage']);
+        $this->assertSame($answer['key'], $q['video_object_key']);
+        $this->assertTrue($this->r2()->objectExists(VideoStorage::bucket('r2'), $answer['key']));
+        $this->assertFalse($this->dream()->objectExists(VideoStorage::bucket('dreamobjects'), $answer['key']));
+        $this->assertSame([['concept', $concept['id']]], array_map(fn($r) => [$r['kind'], $r['id']], VideoMigration::pending()));
+        $this->assertContains('question.video_migrate', array_column(pdo()->query('SELECT action_type FROM activity_log')->fetchAll(), 'action_type'));
+
+        $this->assertTrue(VideoMigration::migrateQuestion(null, $answer['id'], 'r2', $this->fakeTransfer($calls))['skipped']);
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Question #' . ($answer['id'] + 1000) . ' has no video');
+        pdo()->prepare('INSERT INTO concept_questions (id, concept_id, asked_by_user_id, question_text) VALUES (?, ?, ?, ?)')->execute([$answer['id'] + 1000, $concept['id'], $this->charlie->id, 'no video']);
+        VideoMigration::migrateQuestion(null, $answer['id'] + 1000, 'r2', $this->fakeTransfer($calls));
     }
 
     public function testMigrateCopiesVerifiesFlipsTheRowAndKeepsTheOriginal(): void

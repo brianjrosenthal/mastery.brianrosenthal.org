@@ -165,7 +165,7 @@ final class SiteManagement {
 
     /**
      * Owner-editable fields: title, tagline, homepage_markdown, accent_color,
-     * is_public. Unknown keys are ignored; validation errors throw
+     * is_public, questions_public. Unknown keys are ignored; validation errors throw
      * InvalidArgumentException with a message fit for the form.
      */
     public static function updateSiteContent(?UserContext $ctx, int $siteId, array $fields): void {
@@ -192,12 +192,13 @@ final class SiteManagement {
         }
         $homepage = (string)($fields['homepage_markdown'] ?? $site['homepage_markdown']);
         $isPublic = array_key_exists('is_public', $fields) ? ((int)(bool)$fields['is_public']) : (int)$site['is_public'];
+        $questionsPublic = array_key_exists('questions_public', $fields) ? ((int)(bool)$fields['questions_public']) : (int)$site['questions_public'];
 
         $st = self::pdo()->prepare(
-            'UPDATE sites SET title = ?, tagline = ?, homepage_markdown = ?, accent_color = ?, is_public = ?
+            'UPDATE sites SET title = ?, tagline = ?, homepage_markdown = ?, accent_color = ?, is_public = ?, questions_public = ?
              WHERE id = ?'
         );
-        $st->execute([$title, $tagline, $homepage, $accent, $isPublic, $siteId]);
+        $st->execute([$title, $tagline, $homepage, $accent, $isPublic, $questionsPublic, $siteId]);
         self::log('site.update', ['site_id' => $siteId, 'fields' => array_keys($fields)]);
     }
 

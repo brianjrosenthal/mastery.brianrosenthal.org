@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../www/lib/SiteResolver.php';
 require_once __DIR__ . '/../../www/lib/CategoryManagement.php';
 require_once __DIR__ . '/../../www/lib/SubcategoryManagement.php';
 require_once __DIR__ . '/../../www/lib/ConceptManagement.php';
+require_once __DIR__ . '/../../www/lib/QuestionManagement.php';
 require_once __DIR__ . '/../../www/lib/S3Client.php';
 require_once __DIR__ . '/../../www/lib/VideoStorage.php';
 require_once __DIR__ . '/../../www/lib/VideoMigration.php';
@@ -57,7 +58,7 @@ function test_reset_all(): void {
     $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
     foreach ([
         'activity_log', 'emails_sent',
-        'concept_resources', 'concepts', 'subcategories', 'categories', 'sites',
+        'concept_questions', 'concept_resources', 'concepts', 'subcategories', 'categories', 'sites',
         'users',
     ] as $table) {
         $pdo->exec('TRUNCATE TABLE ' . $table);
@@ -98,4 +99,9 @@ function test_seed_tree(UserContext $owner, string $slugHint = 'charlie'): array
     $subcategoryId = SubcategoryManagement::create($owner, $categoryId, ['name' => 'Sequences and Series']);
     $conceptId = ConceptManagement::create($owner, $subcategoryId, ['title' => 'Derivation of e^x']);
     return ['site_id' => $siteId, 'category_id' => $categoryId, 'subcategory_id' => $subcategoryId, 'concept_id' => $conceptId];
+}
+
+// Helper for tests: a question asked under a concept. Returns its id.
+function test_seed_question(UserContext $asker, int $conceptId, string $text = 'Why does that work?'): int {
+    return QuestionManagement::ask($asker, $conceptId, $text);
 }

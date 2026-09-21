@@ -86,6 +86,7 @@ class ApplicationUI {
         echo '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">';
         echo '<title>' . h($title) . ' - ' . h($siteTitle) . '</title>';
         echo self::cssLink('/styles.css');
+        echo self::cssLink('/video-panel.css');
         echo self::siteThemeStyle($themeSite);
         echo '</head><body>';
 

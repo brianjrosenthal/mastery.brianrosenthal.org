@@ -72,6 +72,11 @@ header_html('Site settings');
       Site is public <span class="hint">(unchecked: only you and admins can see it)</span>
     </label>
 
+    <label class="inline">
+      <input type="checkbox" name="questions_public" value="1" <?= !empty($form['questions_public']) ? 'checked' : '' ?>>
+      Questions are visible to visitors <span class="hint">(unchecked: only people who are signed in see questions and answers on your concepts)</span>
+    </label>
+
     <?php if ($isAdmin): ?>
       <h3>Routing <span class="small">(admins only)</span></h3>
       <div class="grid form-grid">

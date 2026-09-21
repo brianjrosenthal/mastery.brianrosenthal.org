@@ -1,5 +1,5 @@
-// Authoring-page behaviours: Markdown preview, the supporting-links editor,
-// and the video panel's tabs. video.js handles uploading/recording.
+// Authoring-page behaviours: Markdown preview and the supporting-links
+// editor. video.js handles the video panel (tabs, uploading, recording).
 
 (function () {
   'use strict';
@@ -78,24 +78,9 @@
     });
   }
 
-  // ---- Video panel tabs -------------------------------------------------
-  function setupTabs() {
-    var panel = document.getElementById('video-panel');
-    if (!panel) return;
-    panel.addEventListener('click', function (e) {
-      var tab = e.target.closest('.tab[data-tab]');
-      if (!tab) return;
-      panel.querySelectorAll('.tab[data-tab]').forEach(function (t) { t.classList.toggle('active', t === tab); });
-      panel.querySelectorAll('[data-tab-panel]').forEach(function (p) {
-        p.classList.toggle('hidden', p.getAttribute('data-tab-panel') !== tab.getAttribute('data-tab'));
-      });
-    });
-  }
-
   function init() {
     setupMarkdownPreview();
     setupResourceRows();
-    setupTabs();
   }
 
   if (document.readyState === 'loading') {
@@ -103,7 +88,4 @@
   } else {
     init();
   }
-
-  // Re-run when the video panel is swapped in by an upload.
-  window.masteryInitManage = init;
 })();

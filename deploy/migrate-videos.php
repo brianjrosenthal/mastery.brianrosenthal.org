@@ -1,14 +1,15 @@
 #!/usr/bin/env php
 <?php
-// Copies every concept video still held by the previous storage provider
-// (DreamHost DreamObjects) into the active one (Cloudflare R2), one at a time,
-// and switches each concept over once its copy is verified. Run it from a
+// Copies every video (concept videos and answer videos) still held by the
+// previous storage provider (DreamHost DreamObjects) into the active one
+// (Cloudflare R2), one at a time, and switches each row over once its copy is
+// verified. Run it from a
 // shell on the server, where there is no request time limit:
 //
 //   php deploy/migrate-videos.php                  # copy everything pending, keep the originals
 //   php deploy/migrate-videos.php --dry-run        # list what would be copied
 //   php deploy/migrate-videos.php --limit=5        # stop after 5 videos
-//   php deploy/migrate-videos.php --concept=42     # just this concept
+//   php deploy/migrate-videos.php --concept=42     # just this concept's own video
 //   php deploy/migrate-videos.php --delete-source  # delete each original once its copy is verified
 //
 // Safe to interrupt and re-run: a concept is only switched over after its copy
@@ -47,13 +48,13 @@ if (!VideoStorage::isProviderConfigured($to)) {
 
 $pending = VideoMigration::pending($to);
 if ($onlyConcept > 0) {
-    $pending = array_values(array_filter($pending, static fn(array $r): bool => $r['id'] === $onlyConcept));
+    $pending = array_values(array_filter($pending, static fn(array $r): bool => $r['kind'] === 'concept' && $r['id'] === $onlyConcept));
 }
 if ($limit > 0) {
     $pending = array_slice($pending, 0, $limit);
 }
 if ($pending === []) {
-    echo "Nothing to migrate: every concept video is already in $toLabel.\n";
+    echo "Nothing to migrate: every video is already in $toLabel.\n";
     exit(0);
 }
 
@@ -63,14 +64,14 @@ printf("%d video(s), %s, to copy into %s%s.\n\n", count($pending), VideoStorage:
 $done = 0;
 $failed = 0;
 foreach ($pending as $i => $row) {
-    printf("[%d/%d] #%d \"%s\" — %s from %s\n", $i + 1, count($pending), $row['id'], $row['title'],
+    printf("[%d/%d] %s #%d \"%s\" — %s from %s\n", $i + 1, count($pending), $row['kind'], $row['id'], $row['title'],
         VideoStorage::humanBytes($row['video_size_bytes']), VideoStorage::providerLabel($row['video_storage']));
     if ($dryRun) {
         continue;
     }
     $started = microtime(true);
     try {
-        $result = VideoMigration::migrateConcept(null, $row['id'], $to, null, $deleteSource);
+        $result = VideoMigration::migratePending(null, $row, $to, null, $deleteSource);
         $seconds = microtime(true) - $started;
         printf("        %s in %.0fs%s%s\n",
             $result['skipped'] ? 'already there' : ($result['copied'] ? 'copied and verified' : 'copy already existed, verified'),

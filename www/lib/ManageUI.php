@@ -2,11 +2,13 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/UserManagement.php';
 require_once __DIR__ . '/SiteManagement.php';
 require_once __DIR__ . '/SiteResolver.php';
 require_once __DIR__ . '/VideoStorage.php';
 require_once __DIR__ . '/ConceptManagement.php';
+require_once __DIR__ . '/QuestionManagement.php';
 
 /**
  * Helpers shared by the /manage/ authoring pages: whose content is being
@@ -102,6 +104,15 @@ final class ManageUI {
     public static function nextParam(): string {
         $next = validate_relative_next_path($_GET['next'] ?? '');
         return $next !== '' ? '&next=' . urlencode($next) : '';
+    }
+
+    /** $url with query parameters appended (after any it already has) and an optional #fragment. */
+    public static function urlWith(string $url, array $params, string $fragment = ''): string {
+        $query = http_build_query($params);
+        if ($query !== '') {
+            $url .= (strpos($url, '?') === false ? '?' : '&') . $query;
+        }
+        return $fragment !== '' ? $url . '#' . $fragment : $url;
     }
 
     // ---- fragments --------------------------------------------------------
@@ -201,29 +212,103 @@ final class ManageUI {
     }
 
     /**
+     * The "Unanswered questions" card on the dashboard: each question links
+     * to its anchor on the public concept page, where the owner answers it.
+     */
+    public static function unansweredQuestionsHtml(array $rows, array $site): string {
+        if ($rows === []) {
+            return '';
+        }
+        $base = SiteResolver::basePathFor($site);
+        $html = '<div class="card qa-inbox"><h3>Unanswered questions (' . count($rows) . ')</h3><ul class="tree">';
+        foreach ($rows as $r) {
+            $url = SiteResolver::urlFor($base, (string)$r['category_slug'], (string)$r['subcategory_slug'], (string)$r['concept_slug']) . '#q' . (int)$r['id'];
+            $asker = trim((string)($r['asker_first_name'] ?? ''));
+            $text = (string)$r['question_text'];
+            $excerpt = mb_strlen($text) > 140 ? mb_substr($text, 0, 139) . '…' : $text;
+            $html .= '<li><div class="tree-node">'
+                   . '<a class="title" href="' . h($url) . '">' . h($r['concept_title']) . '</a>'
+                   . '<span class="small">' . h($asker !== '' ? $asker : 'A former member') . ' · ' . h(date('M j', strtotime((string)$r['created_at']))) . '</span>'
+                   . '<span class="tools"><a href="' . h($url) . '">Answer</a></span>'
+                   . '<div class="qa-inbox-text">' . h($excerpt) . '</div>'
+                   . '</div></li>';
+        }
+        return $html . '</ul></div>';
+    }
+
+    /**
      * The video panel on the concept editor. Returned as a fragment so
      * concept_video_attach_eval.php can hand back the refreshed panel after an
      * upload without a page reload.
      */
     public static function videoPanelHtml(array $concept): string {
         $id = (int)$concept['id'];
-        $key = (string)($concept['video_object_key'] ?? '');
-        $html = '<div class="video-panel" id="video-panel" data-concept-id="' . $id . '"'
+        return self::videoUploadPanelHtml($concept, [
+            'panel_id'       => 'video-panel',
+            'heading_html'   => '<h3 id="video">Video</h3>',
+            'id_field'       => 'concept_id',
+            'id'             => $id,
+            'presign_url'    => '/manage/video_presign_eval.php',
+            'attach_url'     => '/manage/concept_video_attach_eval.php',
+            'remove_url'     => '/manage/concept_video_remove_eval.php',
+            'remove_fields'  => ['id' => $id],
+            'remove_confirm' => 'Remove this video? It will be deleted from storage.',
+        ]);
+    }
+
+    /**
+     * The video panel for answering a question, shown to the owner on the
+     * public concept page under the question. $next is the page to return to
+     * after the remove form posts.
+     */
+    public static function answerVideoPanelHtml(array $question, string $next): string {
+        $id = (int)$question['id'];
+        return self::videoUploadPanelHtml($question, [
+            'panel_id'       => 'answer-video-' . $id,
+            'heading_html'   => '<h4 class="qa-panel-title">Answer with a video</h4>',
+            'id_field'       => 'question_id',
+            'id'             => $id,
+            'presign_url'    => '/manage/answer_video_presign_eval.php',
+            'attach_url'     => '/manage/answer_video_attach_eval.php',
+            'remove_url'     => '/manage/answer_video_remove_eval.php',
+            'remove_fields'  => ['id' => $id, 'next' => $next],
+            'remove_confirm' => 'Remove this answer video? It will be deleted from storage.',
+            'next'           => $next,
+        ]);
+    }
+
+    /**
+     * A self-describing upload/record panel that manage/video.js wires from
+     * its data attributes, so several can share a page. $row carries the
+     * video_* columns (a concept or a question); $spec says which endpoints
+     * serve it:
+     *   panel_id, heading_html, id_field (the POST field name), id,
+     *   presign_url, attach_url, remove_url, remove_fields (hidden inputs for
+     *   the remove form), remove_confirm, next (forwarded to attach_url).
+     */
+    public static function videoUploadPanelHtml(array $row, array $spec): string {
+        $key = (string)($row['video_object_key'] ?? '');
+        $html = '<div class="video-panel" id="' . h((string)$spec['panel_id']) . '"'
+              . ' data-id-field="' . h((string)$spec['id_field']) . '" data-id="' . (int)$spec['id'] . '"'
+              . ' data-presign-url="' . h((string)$spec['presign_url']) . '" data-attach-url="' . h((string)$spec['attach_url']) . '"'
+              . ' data-next="' . h((string)($spec['next'] ?? '')) . '"'
               . ' data-max-bytes="' . VideoStorage::maxBytes() . '"'
               . ' data-configured="' . (VideoStorage::isConfigured() ? '1' : '0') . '">';
-        $html .= '<h3 id="video">Video</h3>';
+        $html .= (string)($spec['heading_html'] ?? '');
 
         if ($key !== '') {
-            $src = VideoStorage::playbackUrlForConcept($concept);
+            $src = VideoStorage::playbackUrlForConcept($row);
             $html .= '<div class="video-current">'
                    . '<video controls playsinline preload="metadata" src="' . h($src) . '"></video>'
-                   . '<p class="small">' . h(VideoStorage::humanBytes((int)$concept['video_size_bytes'])) . ' · '
-                   . h((string)$concept['video_content_type']) . ' · ' . h(VideoStorage::providerLabel(VideoStorage::providerOf($concept))) . ' · uploaded '
-                   . h(date('M j, Y g:i A', strtotime((string)$concept['video_uploaded_at']))) . '</p>'
-                   . '<form method="post" action="/manage/concept_video_remove_eval.php" class="actions">'
-                   . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
-                   . '<input type="hidden" name="id" value="' . $id . '">'
-                   . '<button type="submit" class="button small danger" data-confirm="Remove this video? It will be deleted from storage.">Remove video</button>'
+                   . '<p class="small">' . h(VideoStorage::humanBytes((int)$row['video_size_bytes'])) . ' · '
+                   . h((string)$row['video_content_type']) . ' · ' . h(VideoStorage::providerLabel(VideoStorage::providerOf($row))) . ' · uploaded '
+                   . h(date('M j, Y g:i A', strtotime((string)$row['video_uploaded_at']))) . '</p>'
+                   . '<form method="post" action="' . h((string)$spec['remove_url']) . '" class="actions">'
+                   . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">';
+            foreach ((array)($spec['remove_fields'] ?? []) as $name => $value) {
+                $html .= '<input type="hidden" name="' . h((string)$name) . '" value="' . h((string)$value) . '">';
+            }
+            $html .= '<button type="submit" class="button small danger" data-confirm="' . h((string)$spec['remove_confirm']) . '">Remove video</button>'
                    . '<span class="small">Or replace it below.</span>'
                    . '</form></div>';
         }
@@ -238,26 +323,26 @@ final class ManageUI {
                . '<button type="button" class="tab" data-tab="record" role="tab">Record in the browser</button>'
                . '</div>';
         $html .= '<div data-tab-panel="upload">'
-               . '<div class="dropzone" id="video-dropzone">'
-               . '<p><strong>Drop a video here</strong> or <label style="display:inline;font-weight:700;color:var(--color-primary);cursor:pointer">choose a file<input type="file" id="video-file" accept="video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm,.m4v" style="display:none"></label></p>'
+               . '<div class="dropzone" data-role="dropzone">'
+               . '<p><strong>Drop a video here</strong> or <label>choose a file<input type="file" data-role="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.mov,.webm,.m4v" style="display:none"></label></p>'
                . '<p class="small">MP4, MOV or WebM up to ' . h(VideoStorage::humanBytes(VideoStorage::maxBytes())) . '. Phone recordings work fine.</p>'
                . '</div></div>';
         $html .= '<div data-tab-panel="record" class="hidden">'
-               . '<video id="rec-preview" playsinline muted autoplay></video>'
+               . '<video data-role="rec-preview" playsinline muted autoplay></video>'
                . '<div class="rec-controls">'
-               . '<button type="button" class="button" id="rec-start">Start camera</button>'
-               . '<button type="button" class="button primary hidden" id="rec-record">&#9679; Record</button>'
-               . '<button type="button" class="button danger hidden" id="rec-stop">&#9632; Stop</button>'
-               . '<span class="rec-timer hidden" id="rec-timer"><span class="rec-dot"></span>00:00</span>'
+               . '<button type="button" class="button" data-role="rec-start">Start camera</button>'
+               . '<button type="button" class="button primary hidden" data-role="rec-record">&#9679; Record</button>'
+               . '<button type="button" class="button danger hidden" data-role="rec-stop">&#9632; Stop</button>'
+               . '<span class="rec-timer hidden" data-role="rec-timer"><span class="rec-dot"></span>00:00</span>'
                . '</div>'
-               . '<div class="rec-controls hidden" id="rec-review">'
-               . '<button type="button" class="button primary" id="rec-use">Use this recording</button>'
-               . '<button type="button" class="button" id="rec-again">Record again</button>'
+               . '<div class="rec-controls hidden" data-role="rec-review">'
+               . '<button type="button" class="button primary" data-role="rec-use">Use this recording</button>'
+               . '<button type="button" class="button" data-role="rec-again">Record again</button>'
                . '</div>'
-               . '<p class="small" id="rec-help">Your browser will ask for camera and microphone permission. Recording stays on this device until you click "Use this recording".</p>'
+               . '<p class="small" data-role="rec-help">Your browser will ask for camera and microphone permission. Recording stays on this device until you click "Use this recording".</p>'
                . '</div>';
-        $html .= '<div class="upload-progress hidden" id="upload-progress"><span></span></div>'
-               . '<div class="upload-status" id="upload-status" aria-live="polite"></div>';
+        $html .= '<div class="upload-progress hidden" data-role="progress"><span></span></div>'
+               . '<div class="upload-status" data-role="status" aria-live="polite"></div>';
         return $html . '</div>';
     }
 }

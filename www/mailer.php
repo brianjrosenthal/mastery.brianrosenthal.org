@@ -159,3 +159,23 @@ function send_password_reset_email(string $email, string $token, string $firstNa
 
   return send_email($email, 'Reset your ' . $siteTitle . ' password', $html, $name);
 }
+
+function send_question_asked_email(string $email, string $firstName, string $askerName, string $conceptTitle, string $questionText, string $url): bool {
+  $e = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+  $name = $firstName !== '' ? $e($firstName) : $e($email);
+  $html = '<p>Hello ' . $name . ',</p>'
+        . '<p>' . $e($askerName) . ' asked a question about <strong>' . $e($conceptTitle) . '</strong>:</p>'
+        . '<blockquote>' . nl2br($e($questionText)) . '</blockquote>'
+        . '<p>Answer it with a few words or a video here:</p>'
+        . '<p><a href="' . $e($url) . '">' . $e($url) . '</a></p>';
+  return send_email($email, 'New question about "' . $conceptTitle . '"', $html, $name);
+}
+
+function send_question_answered_email(string $email, string $firstName, string $answererName, string $conceptTitle, string $url): bool {
+  $e = static fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+  $name = $firstName !== '' ? $e($firstName) : $e($email);
+  $html = '<p>Hello ' . $name . ',</p>'
+        . '<p>' . $e($answererName) . ' answered your question about <strong>' . $e($conceptTitle) . '</strong>.</p>'
+        . '<p><a href="' . $e($url) . '">' . $e($url) . '</a></p>';
+  return send_email($email, 'Your question about "' . $conceptTitle . '" was answered', $html, $name);
+}

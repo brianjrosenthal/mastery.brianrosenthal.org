@@ -87,7 +87,8 @@ CREATE TABLE schema_migrations (
 INSERT IGNORE INTO schema_migrations (filename) VALUES
   ('001_initial_schema.sql'),
   ('002_concept_video_storage.sql'),
-  ('003_rebrand_kidsthatteach.sql');
+  ('003_rebrand_kidsthatteach.sql'),
+  ('004_concept_questions.sql');
 
 -- ===== Sites =====
 -- One public site per user: its branding and homepage, the slug that serves
@@ -104,6 +105,7 @@ CREATE TABLE sites (
   homepage_markdown LONGTEXT NOT NULL,
   accent_color VARCHAR(20) NOT NULL DEFAULT 'blue' COMMENT 'Palette key, see SiteUI::ACCENTS',
   is_public TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0 = only the owner/admin can view the site',
+  questions_public TINYINT(1) NOT NULL DEFAULT 1 COMMENT '0 = visitors who are not signed in do not see concept questions',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_sites_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -191,6 +193,39 @@ CREATE TABLE concept_resources (
 ) ENGINE=InnoDB;
 
 CREATE INDEX idx_concept_resources_concept ON concept_resources(concept_id, sort_order);
+
+-- ===== Concept questions =====
+-- A question a signed-in visitor asked under a concept, and the concept
+-- owner's (or an admin's) single answer on the same row: Markdown text and/or
+-- a video in object storage. The video_* columns mirror concepts so the same
+-- VideoStorage helpers serve both; answer videos use the key namespace
+-- videos/{owner_user_id}/answers/{question_id}/{random}.{ext}. answered_at is
+-- NULL until the answer has text or a video; until then only the asker, the
+-- owner and admins can see the question. Questions cascade with the concept
+-- (ConceptManagement::delete removes their videos from storage first); an
+-- asker who is deleted is shown as a former member.
+CREATE TABLE concept_questions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  concept_id INT NOT NULL,
+  asked_by_user_id INT DEFAULT NULL,
+  question_text TEXT NOT NULL,
+  answer_markdown LONGTEXT DEFAULT NULL,
+  answered_at DATETIME DEFAULT NULL,
+  answered_by_user_id INT DEFAULT NULL,
+  video_object_key VARCHAR(255) DEFAULT NULL,
+  video_storage VARCHAR(20) DEFAULT NULL COMMENT 'Provider holding video_object_key: r2 or dreamobjects; NULL when no video',
+  video_content_type VARCHAR(100) DEFAULT NULL,
+  video_size_bytes BIGINT UNSIGNED DEFAULT NULL,
+  video_uploaded_at DATETIME DEFAULT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_concept_questions_concept FOREIGN KEY (concept_id) REFERENCES concepts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_concept_questions_asker FOREIGN KEY (asked_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_concept_questions_answerer FOREIGN KEY (answered_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE INDEX idx_concept_questions_concept_created ON concept_questions(concept_id, created_at);
+CREATE INDEX idx_concept_questions_answered ON concept_questions(answered_at);
 
 -- Seed admin so a fresh install can be signed into immediately: email
 -- "brian.rosenthal@gmail.com", password "mastery". Change the password after

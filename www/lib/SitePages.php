@@ -10,6 +10,7 @@ require_once __DIR__ . '/SiteUI.php';
 require_once __DIR__ . '/CategoryManagement.php';
 require_once __DIR__ . '/SubcategoryManagement.php';
 require_once __DIR__ . '/ConceptManagement.php';
+require_once __DIR__ . '/QuestionManagement.php';
 
 /**
  * Renders the four public pages of a user's site (home, category,
@@ -102,7 +103,7 @@ final class SitePages {
             SiteUI::notFoundPage($site, $basePath, 'That concept does not exist.');
             return;
         }
-        self::concept($site, $basePath, $canEdit, $owner, $navCategories, $category, $subcategory, $concept);
+        self::concept($site, $basePath, $canEdit, $ctx, $owner, $navCategories, $category, $subcategory, $concept);
     }
 
     private static function categoryIsVisible(int|string $id, array $categories): bool {
@@ -213,7 +214,7 @@ final class SitePages {
         SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 
-    private static function concept(array $site, string $basePath, bool $canEdit, ?array $owner, array $navCategories, array $category, array $subcategory, array $concept): void {
+    private static function concept(array $site, string $basePath, bool $canEdit, ?UserContext $ctx, ?array $owner, array $navCategories, array $category, array $subcategory, array $concept): void {
         $subUrl = SiteResolver::urlFor($basePath, (string)$category['slug'], (string)$subcategory['slug']);
         $here = SiteResolver::urlFor($basePath, (string)$category['slug'], (string)$subcategory['slug'], (string)$concept['slug']);
         $published = !empty($concept['is_published']);
@@ -243,9 +244,21 @@ final class SitePages {
         echo SiteUI::resourcesHtml(ConceptManagement::listResources((int)$concept['id']));
         echo '</article>';
 
+        // Q&A: shown to everyone unless the site keeps it for signed-in users.
+        if (!empty($site['questions_public']) || $ctx !== null) {
+            $questions = QuestionManagement::listForConcept((int)$concept['id'], $ctx, $canEdit);
+            $askForm = ManageUI::takeForm('question_ask_' . (int)$concept['id']);
+            echo SiteUI::questionsHtml($concept, $questions, $ctx, $canEdit, $here, $askForm, $_GET['msg'] ?? null, $_GET['err'] ?? null);
+        }
+
         $neighbors = ConceptManagement::neighbors($concept, $canEdit);
         echo SiteUI::prevNextHtml($neighbors['prev'], $neighbors['next'], $basePath, (string)$category['slug'], (string)$subcategory['slug']);
 
+        if ($canEdit) {
+            // The owner's answer video panels need the CSRF token and video.js.
+            echo '<script>window.MASTERY_CSRF = ' . json_encode(csrf_token()) . ';</script>';
+            echo ApplicationUI::jsScript('/manage/video.js');
+        }
         SiteUI::footerHtml($site, $owner, $canEdit, $canEdit ? $actions[0]['url'] : null);
     }
 }

@@ -1,6 +1,6 @@
 <?php
 // Admin: diagnostics and setup for the object storage that holds concept
-// videos. New uploads go to the ACTIVE provider (Cloudflare R2); videos that
+// videos and answer videos. New uploads go to the ACTIVE provider (Cloudflare R2); videos that
 // predate the move are still in DreamHost DreamObjects until migrated. For
 // each provider: check the credentials, create the bucket, apply the CORS rule
 // browsers need to upload directly, and compare the bucket with the database.
@@ -28,7 +28,7 @@ $probes = [];
 foreach (VideoStorage::providers() as $provider) {
     $configured = VideoStorage::isProviderConfigured($provider);
     $bucket = VideoStorage::bucket($provider);
-    $dbKeys = ConceptManagement::listVideoObjectKeys($provider);
+    $dbKeys = VideoMigration::listRecordedObjectKeys($provider);
     $probe = [
         'configured' => $configured, 'bucket' => $bucket, 'db_keys' => $dbKeys,
         'exists' => false, 'count' => null, 'bytes' => null, 'cors' => null, 'error' => null, 'keys' => [],
@@ -106,7 +106,7 @@ header_html('Video Storage');
           <?php if ($probe['exists']): ?>
             <tr><th>Objects</th><td><?= number_format((int)$probe['count']) ?> (<?=h(VideoStorage::humanBytes((int)$probe['bytes']))?>)</td></tr>
             <tr><th>Missing from bucket</th><td><?= count($probe['missing']) === 0 ? '<span class="status-verified">None</span>' : '<span class="status-failed">' . count($probe['missing']) . '</span> concept video(s) recorded here point at objects that are gone' ?></td></tr>
-            <tr><th>Orphans in bucket</th><td><?= count($probe['orphans']) === 0 ? '<span class="status-verified">None</span>' : count($probe['orphans']) . ' object(s) not referenced by any concept' . (!$isActive && $pending === [] ? ' — after a migration these are the copies left behind' : '') ?></td></tr>
+            <tr><th>Orphans in bucket</th><td><?= count($probe['orphans']) === 0 ? '<span class="status-verified">None</span>' : count($probe['orphans']) . ' object(s) not referenced by any concept or answer' . (!$isActive && $pending === [] ? ' — after a migration these are the copies left behind' : '') ?></td></tr>
             <tr><th>CORS origins</th><td>
               <?php if ($probe['cors'] === null): ?><span class="<?= $isActive ? 'status-failed' : 'status-pending' ?>">No CORS rule</span><?php if ($isActive): ?> — browser uploads will fail.<?php endif; ?>
               <?php else: ?><?php foreach ($probe['cors'] as $o): ?><code><?=h($o)?></code> <?php endforeach; ?><?php endif; ?>
@@ -143,7 +143,7 @@ header_html('Video Storage');
       The <?=h(VideoStorage::providerLabel($provider))?> bucket still holds <?= count($probe['orphans']) ?> object(s) nobody references; use <strong>Delete orphans</strong> above to remove them, then its credentials can be dropped from <code>config.local.php</code>.
     <?php endif; endforeach; ?></p>
   <?php else: ?>
-    <p><strong><?= count($pending) ?></strong> concept video(s), <?=h(VideoStorage::humanBytes((int)$pendingBytes))?> in total, are still held elsewhere and will be copied into <?=h(VideoStorage::providerLabel($active))?> under the same key. Each copy is verified by size before the concept is switched over; the original is left in place (it shows up as an orphan afterwards).</p>
+    <p><strong><?= count($pending) ?></strong> video(s), <?=h(VideoStorage::humanBytes((int)$pendingBytes))?> in total, are still held elsewhere and will be copied into <?=h(VideoStorage::providerLabel($active))?> under the same key. Each copy is verified by size before the concept is switched over; the original is left in place (it shows up as an orphan afterwards).</p>
     <?php if (!VideoStorage::isConfigured()): ?>
       <p class="error">Configure <?=h(VideoStorage::providerLabel($active))?> first.</p>
     <?php else: ?>
@@ -158,7 +158,7 @@ php deploy/migrate-videos.php --delete-source   # also delete each original once
     <table class="list" style="margin-top:12px">
       <tr><th>Concept</th><th>Held in</th><th>Size</th><th>Key</th></tr>
       <?php foreach (array_slice($pending, 0, 50) as $row): ?>
-        <tr><td><a href="/manage/concept_edit.php?id=<?= (int)$row['id'] ?>"><?=h($row['title'])?></a></td><td><?=h(VideoStorage::providerLabel($row['video_storage']))?></td><td><?=h(VideoStorage::humanBytes((int)$row['video_size_bytes']))?></td><td><code><?=h($row['video_object_key'])?></code></td></tr>
+        <tr><td><a href="/manage/concept_edit.php?id=<?= (int)$row['concept_id'] ?>"><?=h($row['title'])?></a></td><td><?=h(VideoStorage::providerLabel($row['video_storage']))?></td><td><?=h(VideoStorage::humanBytes((int)$row['video_size_bytes']))?></td><td><code><?=h($row['video_object_key'])?></code></td></tr>
       <?php endforeach; ?>
       <?php if (count($pending) > 50): ?><tr><td colspan="4" class="small">… and <?= count($pending) - 50 ?> more</td></tr><?php endif; ?>
     </table>

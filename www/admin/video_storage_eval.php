@@ -3,11 +3,11 @@
 // action names a provider ('r2' or 'dreamobjects'):
 //   create_bucket   — create the provider's configured bucket if missing.
 //   apply_cors      — replace the bucket's CORS rule with the current site origins.
-//   delete_orphans  — delete objects in that bucket no concept (held there) references.
+//   delete_orphans  — delete objects in that bucket no concept or answer (held there) references.
 //   test_upload     — run the browser's presigned-PUT flow from the server
 //                     (curl) against the active provider and report the raw
 //                     storage response, to diagnose upload failures.
-//   migrate_next    — copy the next concept video still held elsewhere into
+//   migrate_next    — copy the next video (concept or answer) still held elsewhere into
 //                     the active provider (streams through this server).
 require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/VideoStorage.php';
@@ -53,7 +53,7 @@ try {
 
         case 'delete_orphans':
             $inBucket = array_column($client->listObjects($bucket), 'key');
-            $orphans = array_values(array_diff($inBucket, ConceptManagement::listVideoObjectKeys($provider)));
+            $orphans = array_values(array_diff($inBucket, VideoMigration::listRecordedObjectKeys($provider)));
             $client->deleteObjects($bucket, $orphans);
             ActivityLog::log($ctx, 'video_storage.delete_orphans', ['provider' => $provider, 'bucket' => $bucket, 'deleted' => count($orphans)]);
             $msg = count($orphans) . ' orphaned object(s) deleted from ' . $label . '.';
@@ -74,7 +74,7 @@ try {
                 $msg = 'Nothing to migrate: every video is already in ' . VideoStorage::providerLabel(VideoStorage::activeProvider()) . '.';
                 break;
             }
-            $result = VideoMigration::migrateConcept($ctx, $pending[0]['id']);
+            $result = VideoMigration::migratePending($ctx, $pending[0]);
             $msg = 'Migrated "' . $pending[0]['title'] . '" (' . VideoStorage::humanBytes($result['size']) . ') from '
                  . VideoStorage::providerLabel($result['from']) . ' to ' . VideoStorage::providerLabel($result['to'])
                  . ($result['copied'] ? '.' : ' (the copy was already there).')

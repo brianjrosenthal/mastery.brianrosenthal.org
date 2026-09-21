@@ -5,8 +5,8 @@ require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/S3Client.php';
 
 /**
- * App-level policy for concept videos in object storage: which provider holds
- * them, where objects live, what may be uploaded, how the browser gets
+ * App-level policy for videos in object storage (concept videos and the
+ * videos that answer concept questions): which provider holds them, where objects live, what may be uploaded, how the browser gets
  * permission to upload, and how the public site plays them back.
  *
  * Two providers exist. New uploads go to the ACTIVE provider
@@ -210,16 +210,35 @@ final class VideoStorage {
      * (browsers may still be caching the old URL).
      */
     public static function newObjectKeyFor(int $userId, int $conceptId, string $contentType): string {
+        return self::randomKey('videos/' . $userId . '/' . $conceptId, $contentType);
+    }
+
+    /**
+     * The object key for a video answering a concept question. Its own
+     * namespace under the owner's folder, so a key can never be mistaken for
+     * a concept video (keyBelongsToConcept() requires a numeric segment where
+     * this has "answers").
+     */
+    public static function newAnswerObjectKeyFor(int $userId, int $questionId, string $contentType): string {
+        return self::randomKey('videos/' . $userId . '/answers/' . $questionId, $contentType);
+    }
+
+    private static function randomKey(string $prefix, string $contentType): string {
         $ext = self::extensionFor($contentType);
         if ($ext === null) {
             throw new InvalidArgumentException('Unsupported video type "' . $contentType . '". Please use an MP4, WebM or MOV file.');
         }
-        return 'videos/' . $userId . '/' . $conceptId . '/' . bin2hex(random_bytes(16)) . '.' . $ext;
+        return $prefix . '/' . bin2hex(random_bytes(16)) . '.' . $ext;
     }
 
     /** Whether a key has the shape newObjectKeyFor() produces for this concept. */
     public static function keyBelongsToConcept(string $key, int $conceptId): bool {
         return preg_match('#^videos/\d+/' . $conceptId . '/[0-9a-f]{32}\.(mp4|webm|mov)$#', $key) === 1;
+    }
+
+    /** Whether a key has the shape newAnswerObjectKeyFor() produces for this question. */
+    public static function keyBelongsToAnswer(string $key, int $questionId): bool {
+        return preg_match('#^videos/\d+/answers/' . $questionId . '/[0-9a-f]{32}\.(mp4|webm|mov)$#', $key) === 1;
     }
 
     /**

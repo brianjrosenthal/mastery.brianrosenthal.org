@@ -27,6 +27,7 @@ $data = [
     'homepage_markdown' => (string)($_POST['homepage_markdown'] ?? ''),
     'accent_color' => (string)($_POST['accent_color'] ?? 'blue'),
     'is_public' => !empty($_POST['is_public']),
+    'questions_public' => !empty($_POST['questions_public']),
 ];
 $routing = [
     'slug' => (string)($_POST['slug'] ?? $site['slug']),

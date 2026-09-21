@@ -25,6 +25,20 @@ final class SiteResolverTest extends TestCase
         return SiteResolver::resolve($host, $slug, fn(string $s) => $this->bySlug($s), fn(string $d) => $this->byDomain($d), $main);
     }
 
+    public function testAbsoluteUrlForBuildsOnTheCanonicalHomeOrTheSubdomain(): void
+    {
+        $custom = ['slug' => 'charlie', 'domain' => 'mastery.charlierosenthal.org'];
+        $this->assertSame('https://mastery.charlierosenthal.org/algebra-ii/series/e-x/', SiteResolver::absoluteUrlFor($custom, 'algebra-ii', 'series', 'e-x'));
+        $this->assertSame('https://mastery.charlierosenthal.org/', SiteResolver::absoluteUrlFor($custom));
+        $sub = SiteResolver::subdomainHostFor($custom);
+        if ($sub !== '') {
+            $this->assertSame('https://' . $sub . '/algebra-ii/', SiteResolver::absoluteUrlFor($custom, 'algebra-ii', null, null, true), 'the subdomain shares the login cookie');
+        }
+        $pathOnly = ['slug' => 'lilly', 'domain' => null];
+        $this->assertStringEndsWith('/algebra-ii/series/', SiteResolver::absoluteUrlFor($pathOnly, 'algebra-ii', 'series'));
+        $this->assertStringStartsWith('https://', SiteResolver::absoluteUrlFor($pathOnly, 'algebra-ii', 'series'));
+    }
+
     public function testPathFormWinsOnAnyHost(): void
     {
         $r = $this->resolve(self::MAIN, 'charlie');

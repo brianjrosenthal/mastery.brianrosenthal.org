@@ -181,6 +181,24 @@ final class SiteResolver {
     }
 
     /**
+     * Absolute URL for a node of a site's tree, for emails and other places
+     * with no request context. Built on canonicalHomeUrl(); $preferSubdomain
+     * picks {slug}.MAIN_HOST over a custom domain when both exist, because the
+     * subdomain shares the main host's login cookie while a custom domain has
+     * its own, so a signed-in owner following the link stays signed in.
+     */
+    public static function absoluteUrlFor(array $site, ?string $categorySlug = null, ?string $subcategorySlug = null, ?string $conceptSlug = null, bool $preferSubdomain = false): string {
+        $home = self::canonicalHomeUrl($site);
+        if ($preferSubdomain) {
+            $sub = self::subdomainHostFor($site);
+            if ($sub !== '') {
+                $home = 'https://' . $sub . '/';
+            }
+        }
+        return rtrim($home, '/') . self::urlFor('', $categorySlug, $subcategorySlug, $conceptSlug);
+    }
+
+    /**
      * Where a request on a former main hostname (LEGACY_HOSTS) should be sent:
      * the same path and query on the current main host. Null when the host is
      * not a legacy one (or nothing is configured), so the request proceeds.

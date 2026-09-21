@@ -8,6 +8,7 @@ require_once __DIR__ . '/ContentAccess.php';
 require_once __DIR__ . '/Slugger.php';
 require_once __DIR__ . '/SubcategoryManagement.php';
 require_once __DIR__ . '/VideoStorage.php';
+require_once __DIR__ . '/QuestionManagement.php';
 
 /**
  * Concepts ("Derivation of e^x"): the video, description and supporting links
@@ -274,7 +275,10 @@ final class ConceptManagement {
         self::log('concept.video_detach', ['concept_id' => $id, 'object_key' => $key, 'provider' => $provider]);
     }
 
-    /** Delete a concept (and its resources via cascade, and its video from storage). */
+    /**
+     * Delete a concept: its resources and questions cascade in the database,
+     * and its video and every answer video are deleted from storage first.
+     */
     public static function delete(?UserContext $ctx, int $id): void {
         $concept = self::findById($id);
         if (!$concept) {
@@ -282,6 +286,7 @@ final class ConceptManagement {
         }
         ContentAccess::assertCanEdit($ctx, (int)self::ownerUserIdOf($id));
 
+        QuestionManagement::deleteVideoObjectsForConcept($id);
         $key = (string)($concept['video_object_key'] ?? '');
         if ($key !== '') {
             VideoStorage::deleteObject($key, VideoStorage::providerOf($concept));
