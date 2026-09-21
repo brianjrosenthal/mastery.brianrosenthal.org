@@ -100,7 +100,9 @@ answer first has text or a video, cleared if both are removed.
   then the editor opens for the video.
 - **Concept editor**: video panel (upload a file with drag-and-drop, or record
   in the browser with camera+mic via MediaRecorder; progress bar; remove),
-  publish/unpublish, details, links, delete.
+  a Questions card listing every question on the concept with the same
+  answer editor as the public page (Markdown with Preview, answer video
+  panel, delete), publish/unpublish, details, links, delete.
 - Failed forms come back pre-filled (long Markdown is round-tripped through
   the session, `ManageUI::stashForm`).
 

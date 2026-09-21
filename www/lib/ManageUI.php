@@ -117,8 +117,9 @@ final class ManageUI {
 
     // ---- fragments --------------------------------------------------------
 
-    public static function markdownFieldHtml(string $name, string $label, string $value, string $hint = ''): string {
-        $id = 'md_' . preg_replace('/[^a-z0-9_]/i', '_', $name);
+    public static function markdownFieldHtml(string $name, string $label, string $value, string $hint = '', ?string $id = null): string {
+        // $id must be unique per page; pass one when several fields share $name.
+        $id = 'md_' . preg_replace('/[^a-z0-9_]/i', '_', $id ?? $name);
         return '<div class="md-field"><label for="' . h($id) . '">' . h($label)
              . ($hint !== '' ? ' <span class="hint">' . h($hint) . '</span>' : '') . '</label>'
              . '<textarea class="markdown" id="' . h($id) . '" name="' . h($name) . '" rows="10" data-markdown-field>' . h($value) . '</textarea>'
@@ -212,8 +213,50 @@ final class ManageUI {
     }
 
     /**
+     * The Questions card on the concept editor: every question on the concept
+     * (answered or not), each with the answer editor (Markdown text with
+     * Preview, the answer video panel) and a delete button. $next is the
+     * editor's own URL so the endpoints return here.
+     */
+    public static function questionsEditorHtml(array $questions, string $next): string {
+        if ($questions === []) {
+            return '<p class="muted">No questions yet. Visitors who are signed in can ask them on the public page.</p>';
+        }
+        $html = '';
+        foreach ($questions as $q) {
+            $id = (int)$q['id'];
+            $answered = $q['answered_at'] !== null;
+            $asker = trim((string)($q['asker_first_name'] ?? ''));
+            $stash = self::takeForm('question_answer_' . $id);
+            $draft = (string)($stash['data']['answer_markdown'] ?? ($q['answer_markdown'] ?? ''));
+            $html .= '<div class="qa-manage-item" id="q' . $id . '">'
+                   . '<p class="qa-manage-meta"><strong>' . h($asker !== '' ? $asker : 'A former member') . '</strong> asked on '
+                   . h(date('M j, Y', strtotime((string)$q['created_at'])))
+                   . ($answered ? ' <span class="badge published">Answered</span>' : ' <span class="badge draft">Waiting for an answer</span>') . '</p>'
+                   . '<blockquote class="qa-manage-text">' . nl2br(h((string)$q['question_text'])) . '</blockquote>'
+                   . '<form method="post" action="/manage/question_answer_eval.php" class="stack">'
+                   . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
+                   . '<input type="hidden" name="id" value="' . $id . '">'
+                   . '<input type="hidden" name="next" value="' . h($next) . '">'
+                   . ($stash['err'] ? '<p class="error">' . h($stash['err']) . '</p>' : '')
+                   . self::markdownFieldHtml('answer_markdown', 'Answer in words', $draft, 'or answer with a video below, or both', 'answer_' . $id)
+                   . '<div class="actions"><button type="submit" class="button primary">Save answer</button></div>'
+                   . '</form>'
+                   . self::answerVideoPanelHtml($q, $next)
+                   . '<form method="post" action="/manage/question_delete_eval.php" class="actions">'
+                   . '<input type="hidden" name="csrf" value="' . h(csrf_token()) . '">'
+                   . '<input type="hidden" name="id" value="' . $id . '">'
+                   . '<input type="hidden" name="next" value="' . h($next) . '">'
+                   . '<button type="submit" class="button small danger" data-confirm="Delete this question' . ($answered ? ' and its answer' : '') . '?">Delete question</button>'
+                   . '</form>'
+                   . '</div>';
+        }
+        return $html;
+    }
+
+    /**
      * The "Unanswered questions" card on the dashboard: each question links
-     * to its anchor on the public concept page, where the owner answers it.
+     * to the public concept page; "Answer" opens it in the concept editor.
      */
     public static function unansweredQuestionsHtml(array $rows, array $site): string {
         if ($rows === []) {
@@ -229,7 +272,7 @@ final class ManageUI {
             $html .= '<li><div class="tree-node">'
                    . '<a class="title" href="' . h($url) . '">' . h($r['concept_title']) . '</a>'
                    . '<span class="small">' . h($asker !== '' ? $asker : 'A former member') . ' · ' . h(date('M j', strtotime((string)$r['created_at']))) . '</span>'
-                   . '<span class="tools"><a href="' . h($url) . '">Answer</a></span>'
+                   . '<span class="tools"><a href="/manage/concept_edit.php?id=' . (int)$r['concept_id'] . '#q' . (int)$r['id'] . '">Answer</a></span>'
                    . '<div class="qa-inbox-text">' . h($excerpt) . '</div>'
                    . '</div></li>';
         }

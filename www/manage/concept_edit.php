@@ -6,6 +6,7 @@ require_once __DIR__ . '/../partials.php';
 require_once __DIR__ . '/../lib/ManageUI.php';
 require_once __DIR__ . '/../lib/ContentAccess.php';
 require_once __DIR__ . '/../lib/ConceptManagement.php';
+require_once __DIR__ . '/../lib/QuestionManagement.php';
 Application::init();
 require_login();
 
@@ -30,6 +31,9 @@ $resources = array_key_exists('resources', $stash['data']) ? (array)$stash['data
 $err = $stash['err'] ?? ($_GET['err'] ?? null);
 $msg = $_GET['msg'] ?? null;
 $published = !empty($concept['is_published']);
+$questions = QuestionManagement::listForConcept($id, $ctx, true);
+$unanswered = count(array_filter($questions, static fn(array $q): bool => $q['answered_at'] === null));
+$selfUrl = '/manage/concept_edit.php?id=' . $id;
 
 ApplicationUI::useSiteTheme(SiteManagement::findByUserId($userId));
 header_html('Edit ' . $concept['title']);
@@ -52,6 +56,11 @@ header_html('Edit ' . $concept['title']);
 
 <div class="card">
   <?= ManageUI::videoPanelHtml($concept) ?>
+</div>
+
+<div class="card" id="questions">
+  <h3>Questions (<?= count($questions) ?><?= $unanswered > 0 ? ', ' . $unanswered . ' waiting' : '' ?>)</h3>
+  <?= ManageUI::questionsEditorHtml($questions, $selfUrl) ?>
 </div>
 
 <div class="card">

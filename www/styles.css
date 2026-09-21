@@ -352,6 +352,16 @@ table.list td.num, table.list th.num { text-align: right; }
 .badge.video { background: var(--color-primary-soft); color: var(--color-primary-dark); }
 .badge.novideo { background: #F1EEF7; color: var(--color-ink-muted); }
 
+/* ===== Manage: questions on the concept editor ===== */
+
+.qa-manage-item { padding: 16px 0; border-top: 1px solid var(--color-border); }
+.qa-manage-item:first-of-type { border-top: 0; padding-top: 4px; }
+.qa-manage-meta { margin: 0 0 8px; font-size: 0.9rem; color: var(--color-ink-muted); }
+.qa-manage-meta strong { color: var(--color-ink); }
+.qa-manage-text { margin: 0 0 14px; padding: 10px 14px; border-left: 4px solid var(--color-primary); background: var(--color-primary-soft); border-radius: 0 var(--radius) var(--radius) 0; }
+.qa-manage-item .video-panel { margin-top: 14px; }
+.qa-manage-item .video-panel + .actions { margin-top: 12px; }
+
 /* ===== Manage: colour scheme picker ===== */
 
 .scheme-picker { display: flex; gap: 10px; flex-wrap: wrap; }
